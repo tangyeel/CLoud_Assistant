@@ -23,7 +23,7 @@ ddgs>=9.0.0
 edge-tts>=6.1.0
 gTTS>=2.5.4
 pydub>=0.25.0
-audioop-lts>=0.2.0
+audioop-lts>=0.2.0; python_version >= "3.13"
 imageio-ffmpeg>=0.5.0
 
 # --- Scheduling ---
