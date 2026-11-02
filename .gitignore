@@ -1,0 +1,49 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment variables (NEVER COMMIT SECRETS)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Google OAuth tokens & secrets (NEVER COMMIT)
+credentials/*.json
+credentials/token*.json
+credentials/credentials.json
+
+# Audio caches & temp files
+audio/*.ogg
+audio/*.mp3
+temp_audio/
+test_*.mp3
+test_*.ogg
+!audio/.gitkeep
+
+# Local user attendance data
+data/attendance.json
+!data/.gitkeep
+
+# Logs
+logs/*.log
+!logs/.gitkeep
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Artifacts
+.DS_Store
+Thumbs.db
+desktop.ini

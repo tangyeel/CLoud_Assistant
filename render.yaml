@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: ai-assistant
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: TELEGRAM_WEBHOOK_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_B64
+        sync: false
+      - key: GOOGLE_TOKEN_B64
+        sync: false
+      - key: GOOGLE_CREDENTIALS_PATH
+        value: credentials/credentials.json
+      - key: GOOGLE_TOKEN_PATH
+        value: credentials/token.json
+      - key: TTS_VOICE
+        value: en-US-ChristopherNeural
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      - key: PORT
+        value: "8000"
