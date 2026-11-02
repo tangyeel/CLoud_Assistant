@@ -143,8 +143,8 @@ routes = [
 # ─── Lifespan Lifecycle for Starlette Webhook Server ───────────────────
 @asynccontextmanager
 async def lifespan(app: Starlette):
-    """Manage application startup and shutdown lifecycle for webhook mode."""
-    logger.info("🚀 Starting AI Assistant Web Server...")
+    """Manage application startup and shutdown lifecycle."""
+    logger.info("🚀 Starting AI Assistant Web Server on port %s...", PORT)
 
     if ptb_app:
         await ptb_app.initialize()
@@ -155,6 +155,10 @@ async def lifespan(app: Starlette):
             webhook_endpoint = f"{clean_url}/webhook"
             await ptb_app.bot.set_webhook(url=webhook_endpoint, allowed_updates=Update.ALL_TYPES)
             logger.info(f"✅ Telegram webhook connected: {webhook_endpoint}")
+        else:
+            await ptb_app.bot.delete_webhook()
+            await ptb_app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+            logger.info("✅ Telegram background polling started.")
 
     logger.info("✅ Assistant background services fully initialized.")
 
@@ -162,6 +166,8 @@ async def lifespan(app: Starlette):
 
     logger.info("🛑 Shutting down AI Assistant...")
     if ptb_app:
+        if not TELEGRAM_WEBHOOK_URL and ptb_app.updater and ptb_app.updater.running:
+            await ptb_app.updater.stop()
         await ptb_app.stop()
         await ptb_app.shutdown()
     logger.info("👋 Assistant offline.")
@@ -173,10 +179,9 @@ starlette_app = Starlette(routes=routes, lifespan=lifespan)
 # ─── Local Polling Runner Helper ───────────────────────────────────────
 def run_polling_mode():
     """
-    Run the assistant in local polling mode.
-    Ideal for local testing without needing an HTTPS public URL.
+    Run the assistant in standalone local polling mode.
     """
-    logger.info("🔄 Launching in LOCAL POLLING MODE (no public webhook needed)...")
+    logger.info("🔄 Launching in STANDALONE POLLING MODE...")
     validate_config(exit_on_error=False)
 
     app = build_telegram_app()
@@ -190,10 +195,10 @@ def run_polling_mode():
 
 # ─── CLI Entrypoint ────────────────────────────────────────────────────
 if __name__ == "__main__":
-    if "--polling" in sys.argv or not TELEGRAM_WEBHOOK_URL:
+    if "--polling" in sys.argv:
         run_polling_mode()
     else:
-        logger.info(f"🌐 Launching in WEBHOOK MODE on port {PORT}...")
+        logger.info(f"🌐 Launching AI Assistant on port {PORT}...")
         uvicorn.run(
             "main:starlette_app",
             host="0.0.0.0",
