@@ -228,12 +228,13 @@ async def _handle_schedule_event(params: dict) -> str:
         )
         link = result.get("link", "")
         link_str = f"\n🔗 [View on Google Calendar]({link})" if link else ""
+        loc_str = f"\n📍 Location: {location}" if location else ""
         return (
             f"✅ **Event Scheduled!**\n\n"
             f"📌 **{result['summary']}**\n"
             f"📅 Date: `{date}`\n"
             f"🕐 Time: `{start_time}` → `{end_time or '1 hour'}`"
-            f"{f'\n📍 Location: {location}' if location else ''}"
+            f"{loc_str}"
             f"{link_str}"
         )
     except Exception as e:
