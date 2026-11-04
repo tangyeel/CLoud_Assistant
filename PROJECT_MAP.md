@@ -45,6 +45,7 @@ attendance check-in and audio cleanup
 |---|---|---|
 | Owner-only Telegram access | `authorized_only` compares chat ID; if unset, returns setup hint. Applied to handlers. | `bot/middleware.py`, `bot/handlers.py` |
 | Natural-language interaction | AI parses intent and routes calendar/task/email/calendar/classroom/attendance/weather/news/search/report/general requests. | `ai/prompts.py`, `bot/router.py` |
+| Exam schedule photo import | Telegram photo -> Gemini vision JSON extraction -> preview/uncertainty notice -> explicit confirmation -> timed or all-day Calendar events. Pending previews expire after 15 minutes; requires Gemini API key. | `bot/handlers.py`, `ai/gemini_client.py`, `google_services/calendar_service.py` |
 | Calendar | Read today's/tomorrow/upcoming events across default + optional Thapar token; create event; detect overlap and offer suggested time / schedule anyway / cancel. | `google_services/calendar_service.py`, `bot/router.py`, callback handler |
 | Tasks | List/create/complete; snooze helper exists. Google Tasks defaults to `@default` task list. | `google_services/tasks_service.py`, `bot/router.py`, `bot/handlers.py` |
 | Gmail | Fetch unread metadata/snippets from recent window, excluding promotions/social/forums; default + optional Thapar. Helper can fetch body or mark read. No implemented AI email action classification or inline email actions. | `google_services/gmail_service.py`, `bot/router.py` |
@@ -61,7 +62,7 @@ attendance check-in and audio cleanup
 
 ### Telegram commands registered in `main.py`
 
-`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`.
+`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`.
 
 ## Spec status and gaps
 

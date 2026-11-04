@@ -128,6 +128,12 @@ DEADLINE_ALERT_HOURS: list[int] = [
     int(value) for value in os.getenv("DEADLINE_ALERT_HOURS", "24,2").split(",") if value.strip()
 ]
 DEADLINE_ALERT_CHECK_MINUTES: int = int(os.getenv("DEADLINE_ALERT_CHECK_MINUTES", "10"))
+PREMARKET_RADAR_HOUR: int = int(os.getenv("PREMARKET_RADAR_HOUR", "9"))
+PREMARKET_RADAR_MINUTE: int = int(os.getenv("PREMARKET_RADAR_MINUTE", "0"))
+SATURDAY_IPO_HOUR: int = int(os.getenv("SATURDAY_IPO_HOUR", "8"))
+SATURDAY_IPO_MINUTE: int = int(os.getenv("SATURDAY_IPO_MINUTE", "0"))
+PRICE_ALERT_CHECK_MINUTES: int = int(os.getenv("PRICE_ALERT_CHECK_MINUTES", "5"))
+
 
 # --- Server / Host ---
 PORT: int = int(os.getenv("PORT", "8000"))

@@ -12,6 +12,11 @@ from config import (
     EVENING_REPORT_MINUTE,
     DEADLINE_ALERT_HOURS,
     DEADLINE_ALERT_CHECK_MINUTES,
+    PREMARKET_RADAR_HOUR,
+    PREMARKET_RADAR_MINUTE,
+    SATURDAY_IPO_HOUR,
+    SATURDAY_IPO_MINUTE,
+    PRICE_ALERT_CHECK_MINUTES,
     TELEGRAM_CHAT_ID,
     SEND_ERROR_ALERTS,
 )
@@ -239,6 +244,77 @@ async def _check_deadlines():
                 logger.warning(f"Could not send deadline alert for '{title}': {e}")
 
 
+async def _premarket_radar_job():
+    """Trigger daily Pre-Market Radar at 09:00 IST."""
+    logger.info("⏰ Trigger: Starting scheduled Pre-Market Radar...")
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.finance import get_premarket_data, format_premarket_card
+        data = get_premarket_data()
+        card = format_premarket_card(data)
+        await _bot_instance.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=card,
+            parse_mode="Markdown",
+        )
+        logger.info("✅ Dispatched Pre-Market Radar to Telegram.")
+    except Exception as e:
+        logger.error(f"Pre-Market Radar job failed: {e}", exc_info=True)
+
+
+async def _saturday_ipo_job():
+    """Trigger weekly Saturday IPO report at 08:00 IST."""
+    logger.info("⏰ Trigger: Starting scheduled Saturday IPO Briefing...")
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.ipo import format_ipo_card
+        card = format_ipo_card()
+        msg = f"🌅 **Saturday Weekend IPO Intelligence Briefing**\n\n{card}"
+        await _bot_instance.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=msg,
+            parse_mode="Markdown",
+        )
+        logger.info("✅ Dispatched Saturday IPO Briefing to Telegram.")
+    except Exception as e:
+        logger.error(f"Saturday IPO job failed: {e}", exc_info=True)
+
+
+async def _check_market_alerts_job():
+    """Check both price alerts and investment thesis triggers."""
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.price_alerts import check_price_alerts_triggers
+        from utils.thesis import check_thesis_triggers
+
+        alerts = check_price_alerts_triggers()
+        for alt_msg in alerts:
+            await _bot_instance.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=alt_msg,
+                parse_mode="Markdown",
+            )
+            logger.info("Dispatched live price alert to Telegram.")
+
+        thesis_alerts = check_thesis_triggers()
+        for th_msg in thesis_alerts:
+            await _bot_instance.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=th_msg,
+                parse_mode="Markdown",
+            )
+            logger.info("Dispatched thesis alert to Telegram.")
+
+    except Exception as e:
+        logger.warning(f"Error checking market alerts: {e}")
+
+
 def _job_error_listener(event):
     if event.exception:
         logger.error(f"Scheduler job error in '{event.job_id}': {event.exception}", exc_info=True)
@@ -302,6 +378,48 @@ def start_scheduler():
         id="attendance_daily_poll",
         replace_existing=True,
     )
+
+    # Pre-Market Radar Job (09:00 IST daily)
+    scheduler.add_job(
+        _premarket_radar_job,
+        trigger="cron",
+        hour=PREMARKET_RADAR_HOUR,
+        minute=PREMARKET_RADAR_MINUTE,
+        id="premarket_radar",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info(
+        f"📅 Pre-Market Radar scheduled daily at {PREMARKET_RADAR_HOUR:02d}:{PREMARKET_RADAR_MINUTE:02d} ({TIMEZONE})"
+    )
+
+    # Saturday Weekly IPO Briefing (08:00 IST Saturday)
+    scheduler.add_job(
+        _saturday_ipo_job,
+        trigger="cron",
+        day_of_week="sat",
+        hour=SATURDAY_IPO_HOUR,
+        minute=SATURDAY_IPO_MINUTE,
+        id="saturday_ipo_briefing",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info(
+        f"📅 Saturday IPO Briefing scheduled weekly at {SATURDAY_IPO_HOUR:02d}:{SATURDAY_IPO_MINUTE:02d} ({TIMEZONE})"
+    )
+
+    # Price & Thesis Market Alerts Polling (Every 5 mins)
+    scheduler.add_job(
+        _check_market_alerts_job,
+        trigger="interval",
+        minutes=PRICE_ALERT_CHECK_MINUTES,
+        id="market_alerts_monitor",
+        replace_existing=True,
+    )
+    logger.info(
+        f"🔔 Market price alerts monitor active (every {PRICE_ALERT_CHECK_MINUTES} mins)"
+    )
+
 
     scheduler.add_job(
         _check_deadlines,

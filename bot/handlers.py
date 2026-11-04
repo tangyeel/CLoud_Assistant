@@ -2,7 +2,8 @@
 bot/handlers.py — Telegram bot command, voice note, and interactive message handlers.
 """
 import os
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
@@ -20,6 +21,9 @@ from config import TELEGRAM_CHAT_ID, TIMEZONE, USER_CITY
 from utils.logger import logger
 
 
+_PENDING_EXAM_IMPORTS: dict[str, dict] = {}
+
+
 @authorized_only
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
@@ -29,8 +33,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "🎙️ **Two-Way Voice Supported:**\n"
         "Send me any voice note anytime — I will transcribe, execute, and speak back!\n\n"
         "📅 **Daily Briefings:**\n"
-        "• Morning report at 07:30 AM (emails, tasks, calendar, classroom, weather)\n"
-        "• Evening wind-down at 09:00 PM (commitments, deadlines, tomorrow's weather)\n\n"
+        "• Morning report at 06:30 AM (emails, tasks, calendar, classroom, weather)\n"
+        "• Evening wind-down at 08:00 PM (commitments, deadlines, tomorrow's weather)\n\n"
         "⚡ **Smart Safeguards Active:**\n"
         "• 15-Minute Time-to-Leave lecture alerts\n"
         "• Calendar conflict detection with auto-suggested free slots\n"
@@ -52,10 +56,17 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /attendance — Thapar Attendance 75% safeguard & safe bunk tally\n"
         "• /weather — Real-time weather and rain forecast for Patiala\n"
         "• /news — Top live tech, finance, and market headlines\n"
+        "• /market — Live snapshot of Indian (Nifty, Sensex, VIX) & global indices + forex\n"
+        "• /stock <name> — Quote, upcoming earnings date, key ratios & latest news (typo-tolerant)\n"
+        "• /ipo — Upcoming & open IPOs with issue price, GMP & subscription status\n"
+        "• /thesis — Investment thesis portfolio & live P&L tracker\n"
+        "• /alerts — Manage live price & percentage volatility alerts\n"
+        "• /search <query> — Real-time free web search\n"
         "• /search <query> — Real-time free web search\n"
         "• /emails — Unread priority emails across Personal & Thapar\n"
         "• /classes — Google Classroom assignments & deadlines\n"
         "• /status — AI provider hierarchy & system health\n\n"
+        "📷 Send an exam timetable photo to preview exams and add them to Calendar.\n"
         "🎙️ *Tip: You can send voice notes anytime or tap interactive buttons!*",
         parse_mode="Markdown",
     )
@@ -131,6 +142,100 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 @authorized_only
+async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /market — Indian & Global market snapshot."""
+    from utils.finance import get_market_snapshot
+    card = get_market_snapshot()
+    await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /stock <name> — typo-tolerant stock overview, news, and earnings."""
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        await update.effective_message.reply_text(
+            "Please provide a stock name or ticker, e.g. `/stock Reliance` or `/stock infy`",
+            parse_mode="Markdown",
+        )
+        return
+
+    from utils.finance import fuzzy_resolve_stock, get_stock_details
+    name, ticker = fuzzy_resolve_stock(query)
+    if not ticker:
+        await update.effective_message.reply_text(
+            f"❌ Could not resolve *'{query}'* to an active stock. Try the full company name (e.g. `/stock Tata Motors`).",
+            parse_mode="Markdown",
+        )
+        return
+
+    card = get_stock_details(ticker, company_name=name or "")
+    await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_ipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /ipo — Live IPO intelligence & GMP report."""
+    from utils.ipo import format_ipo_card
+    card = format_ipo_card()
+    await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_thesis(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /thesis — view, new, or close investment thesis."""
+    args = context.args or []
+    from utils.thesis import format_theses_card, add_thesis, close_thesis
+
+    if not args:
+        card = format_theses_card()
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+        return
+
+    subcmd = args[0].lower()
+    if subcmd == "close" and len(args) > 1:
+        target = " ".join(args[1:])
+        ok, msg = close_thesis(target)
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    elif subcmd in ("new", "add", "log") and len(args) >= 3:
+        # /thesis new <symbol> <entry> <target> [stoploss] [rationale...]
+        sym = args[1]
+        try:
+            entry = float(args[2])
+            target = float(args[3])
+            sl = float(args[4]) if len(args) > 4 and args[4].replace(".", "", 1).isdigit() else None
+            rat_idx = 5 if sl is not None else 4
+            rationale = " ".join(args[rat_idx:]) if len(args) > rat_idx else ""
+            ok, msg = add_thesis(sym, entry, target, sl, rationale)
+            await update.effective_message.reply_text(msg, parse_mode="Markdown")
+        except ValueError:
+            await update.effective_message.reply_text(
+                "❌ Invalid format. Usage: `/thesis new <symbol> <entry_price> <target_price> [stoploss] [rationale]`",
+                parse_mode="Markdown",
+            )
+    else:
+        # Default: view
+        card = format_theses_card()
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /alerts — view or cancel price alerts."""
+    args = context.args or []
+    from utils.price_alerts import list_alerts_card, cancel_alert
+
+    if args and args[0].lower() in ("cancel", "del", "remove") and len(args) > 1:
+        target = " ".join(args[1:])
+        ok, msg = cancel_alert(target)
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    else:
+        card = list_alerts_card()
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+
+@authorized_only
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle interactive inline button taps."""
     query = update.callback_query
@@ -139,7 +244,51 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
     logger.info(f"Button callback triggered: {data}")
 
-    if data == "btn_agenda":
+    if data.startswith("exam_cancel_"):
+        _PENDING_EXAM_IMPORTS.pop(data.removeprefix("exam_cancel_"), None)
+        await query.edit_message_text("Exam schedule import cancelled.")
+
+    elif data.startswith("exam_add_"):
+        token = data.removeprefix("exam_add_")
+        draft = _PENDING_EXAM_IMPORTS.pop(token, None)
+        if (not draft or draft["chat_id"] != update.effective_chat.id
+                or draft["expires"] < datetime.now(timezone.utc)):
+            await query.edit_message_text("This exam schedule preview expired. Please upload the photo again.")
+            return
+
+        from google_services.calendar_service import create_event
+        created, failed = [], []
+        for exam in draft["exams"]:
+            try:
+                if exam["start_datetime"]:
+                    create_event(
+                        summary=f"Exam: {exam['subject']}",
+                        start_datetime=exam["start_datetime"],
+                        end_datetime=exam["end_datetime"],
+                        location=exam["location"],
+                        description="Added from an exam schedule photo.",
+                    )
+                else:
+                    exam_date = datetime.strptime(exam["date"], "%Y-%m-%d").date()
+                    create_event(
+                        summary=f"Exam: {exam['subject']}",
+                        start_datetime=exam_date.isoformat(),
+                        end_datetime=(exam_date + timedelta(days=1)).isoformat(),
+                        location=exam["location"],
+                        description="Added from an exam schedule photo.",
+                        all_day=True,
+                    )
+                created.append(exam["subject"])
+            except Exception as e:
+                logger.error(f"Could not add exam '{exam['subject']}' to Calendar: {e}")
+                failed.append(exam["subject"])
+
+        result = f"✅ Added {len(created)} exam(s) to Google Calendar."
+        if failed:
+            result += "\nCould not add: " + ", ".join(failed)
+        await query.edit_message_text(result)
+
+    elif data == "btn_agenda":
         resp = await _handle_query_calendar({"days_ahead": 1})
         await query.message.reply_text(resp, parse_mode="Markdown")
 
@@ -470,6 +619,98 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
                 os.remove(temp_voice_path)
             except Exception:
                 pass
+
+
+@authorized_only
+async def handle_exam_schedule_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Read a timetable photo, preview detected exams, and wait for Calendar confirmation."""
+    message = update.effective_message
+    photo = message.photo[-1] if message and message.photo else None
+    if not photo:
+        return
+    if photo.file_size and photo.file_size > 20 * 1024 * 1024:
+        await message.reply_text("That image is too large. Please send a smaller photo of the timetable.")
+        return
+
+    status = await message.reply_text("🔎 Reading the exam schedule…")
+    try:
+        tg_file = await context.bot.get_file(photo.file_id)
+        image_bytes = await tg_file.download_as_bytearray()
+        from ai.gemini_client import read_exam_schedule_image
+
+        today = datetime.now(ZoneInfo(TIMEZONE)).date().isoformat()
+        parsed = read_exam_schedule_image(bytes(image_bytes), "image/jpeg", today)
+        exams = []
+        for row in parsed.get("exams", []):
+            try:
+                exam_date = datetime.strptime(str(row.get("date", "")), "%Y-%m-%d").date()
+                subject = " ".join(str(row.get("subject", "")).split())[:150]
+                if not subject:
+                    continue
+                start_time = row.get("start_time")
+                end_time = row.get("end_time")
+                start_datetime = end_datetime = None
+                if start_time:
+                    start_clock = datetime.strptime(str(start_time), "%H:%M").time()
+                    start_dt = datetime.combine(exam_date, start_clock)
+                    if end_time:
+                        end_dt = datetime.combine(
+                            exam_date, datetime.strptime(str(end_time), "%H:%M").time()
+                        )
+                        if end_dt <= start_dt:
+                            continue
+                    else:
+                        end_dt = start_dt + timedelta(hours=2)
+                    start_datetime = start_dt.isoformat()
+                    end_datetime = end_dt.isoformat()
+                exams.append({
+                    "subject": subject,
+                    "date": exam_date.isoformat(),
+                    "start_datetime": start_datetime,
+                    "end_datetime": end_datetime,
+                    "location": " ".join(str(row.get("location") or "").split())[:200],
+                })
+            except (TypeError, ValueError):
+                continue
+
+        if not exams:
+            await status.edit_text("I couldn’t read any complete exam dates. Try a clearer, straight-on photo.")
+            return
+
+        exams = exams[:25]
+        now_utc = datetime.now(timezone.utc)
+        _PENDING_EXAM_IMPORTS.update({
+            key: value for key, value in _PENDING_EXAM_IMPORTS.items()
+            if value["expires"] > now_utc
+        })
+        token = uuid.uuid4().hex[:12]
+        _PENDING_EXAM_IMPORTS[token] = {
+            "chat_id": update.effective_chat.id,
+            "exams": exams,
+            "expires": now_utc + timedelta(minutes=15),
+        }
+        rows = []
+        for exam in exams:
+            date_text = datetime.strptime(exam["date"], "%Y-%m-%d").strftime("%a, %b %d, %Y")
+            time_text = (f"{exam['start_datetime'][11:16]}–{exam['end_datetime'][11:16]}"
+                         if exam["start_datetime"] else "All day")
+            location_text = f" · {exam['location']}" if exam["location"] else ""
+            rows.append(f"• {date_text} · {time_text} · {exam['subject']}{location_text}")
+        uncertain = parsed.get("uncertain", [])
+        review_note = "\n\nPlease check the detected details before adding them." \
+            if uncertain else "\n\nPlease review before adding these to your calendar."
+        if uncertain:
+            review_note += "\nNeeds a closer look: " + "; ".join(str(item) for item in uncertain[:4])
+
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Add to Calendar", callback_data=f"exam_add_{token}"),
+            InlineKeyboardButton("Cancel", callback_data=f"exam_cancel_{token}"),
+        ]])
+        await status.edit_text("📚 I found these exams:\n\n" + "\n".join(rows) + review_note,
+                               reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Exam schedule photo processing failed: {e}", exc_info=True)
+        await status.edit_text(f"❌ I couldn’t read that schedule: {e}")
 
 
 def _split_message(text: str, max_chars: int = 4000) -> list[str]:

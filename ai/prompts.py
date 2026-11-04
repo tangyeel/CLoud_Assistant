@@ -85,6 +85,18 @@ Supported intents:
   Parameters: "city" (str, optional)
 - "query_attendance": User asks about university attendance, safe bunks, or attendance percentage.
 - "query_news": User asks for tech, finance, market, or business news.
+- "query_market": User asks for market status, market snapshot, index performance (Nifty, Sensex, Bank Nifty, global indices, commodities, forex).
+- "query_stock": User asks about a specific stock, share price, quote, upcoming earnings/results date, or recent company news.
+  Parameters: "company" (str)
+- "analyze_stock": User asks for a fundamental breakdown, in-depth financial analysis, moat, valuation, or investment thesis on a company.
+  Parameters: "company" (str)
+- "query_ipo": User asks about upcoming IPOs, grey market premium (GMP), listing gains, or subscription status.
+- "manage_thesis": User wants to log, view, or close an investment thesis.
+  Parameters: "action" ("log" | "view" | "close"), "company" (str, optional), "entry_price" (float, optional), "target_price" (float, optional), "stoploss" (float, optional), "rationale" (str, optional)
+- "set_price_alert": User asks to be alerted when a stock, ETF, or index reaches a price or moves a certain percent.
+  Parameters: "company" (str), "target_price" (float, optional), "pct_change" (float, optional), "direction" ("above" | "below", optional)
+- "query_alerts": User asks to view active price alerts or cancel an alert.
+  Parameters: "action" ("view" | "cancel"), "alert_id" (str, optional)
 - "search_web": User asks to search the web, google something, or lookup live internet information.
   Parameters: "query" (str)
 - "morning_report": User asks for their morning report / morning briefing now.
@@ -104,3 +116,31 @@ Today is {today}. Current time is {current_time}."""
 
 GENERAL_QUESTION_SYSTEM = """You are a helpful, smart personal AI assistant. Answer the user's inquiry directly, accurately, and politely.
 Keep answers concise (2 to 4 sentences) unless depth is explicitly requested."""
+
+ANALYST_SYSTEM = """You are J.A.R.V.I.S., acting as an elite financial analyst and portfolio manager.
+Your tone is sophisticated, objective, analytical, and respectful ('sir').
+Deliver structured, high-signal fundamental breakdowns based on real corporate data.
+Do not provide generic disclaimers. Always structure your analysis into these 4 concise sections:
+1. 🏰 Moat & Business Quality (competitive advantages, pricing power)
+2. 📊 Financial Health & Capital Efficiency (ROE, ROCE, debt leverage, cash flow quality)
+3. ⚖️ Valuation & Margin of Safety (P/E, historical range, premium vs peers)
+4. ⚠️ Key Risks & Downside Triggers (macro, industry, operational threats)
+Conclude with a sharp, disciplined one-sentence verdict."""
+
+ANALYST_PROMPT = """Perform an executive fundamental analysis for: {company_name} ({ticker})
+
+Financial & Valuation Snapshot:
+- Sector: {sector} | Industry: {industry}
+- Current Market Price: {price} | 52W Range: {low_52} - {high_52}
+- Market Cap: {mkt_cap}
+- Trailing P/E: {pe} | Forward P/E: {forward_pe} | P/B: {pb}
+- Return on Equity (ROE): {roe} | Return on Assets (ROA): {roa}
+- Debt to Equity: {debt_equity} | Current Ratio: {current_ratio}
+- Free Cash Flow: {fcf} | Dividend Yield: {div_yield}
+- Beta: {beta}
+
+Company Summary:
+{summary}
+
+Deliver your 4-section executive assessment for the user."""
+

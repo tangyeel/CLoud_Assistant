@@ -1,0 +1,15 @@
+[
+  {
+    "id": "alt_6257a8",
+    "company": "Reliance",
+    "ticker": "RELIANCE.NS",
+    "alert_type": "price",
+    "threshold": 1400.0,
+    "direction": "above",
+    "baseline_price": null,
+    "raw_instruction": "Alert when Reliance is above 1400.0",
+    "created_at": "2026-11-04T23:55:28.734105+05:30",
+    "active": false,
+    "triggered": false
+  }
+]

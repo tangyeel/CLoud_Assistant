@@ -16,6 +16,7 @@
 * **Dual-Account Google Workspace:** Queries your Personal account (`token.json`) and University account (`token_thapar.json`) simultaneously.
 * **15-Minute "Time-to-Leave" Alerts:** Background cron checks your calendar 10–18 minutes before classes start (e.g. *LT10, B304, C328*) and sends a notification to leave on time.
 * **Deadline Alerts:** Checks pending Google Tasks and dated Classroom assignments every 10 minutes; sends reminders about 24 hours and 2 hours before the deadline.
+* **Exam Schedule Photo Import:** Send a photo of your exam timetable; Jarvis extracts dates and times, previews them, and adds confirmed exams to Google Calendar.
 * **Calendar Conflict Guard:** Intercepts overlapping bookings (e.g. *"Book gym tomorrow at 9 AM"*), alerts you to conflicting lectures, and auto-suggests the next open daytime slot.
 * **75% Attendance Safeguard (`/attendance`):** Tracks attended vs. total classes per course, calculating **safe bunks remaining** or **consecutive lectures required** to maintain the 75% threshold. Prompts with a 1-tap poll at 14:05 daily.
 
@@ -67,11 +68,15 @@
 │   └── speech.py          # Edge-TTS audio synthesis & chime prepending
 ├── utils/
 │   ├── attendance.py      # Thapar 75% attendance margin engine
+│   ├── finance.py         # Market snapshot, stock detail & pre-market radar
 │   ├── health.py          # /health endpoint for 24/7 uptime pings
+│   ├── ipo.py             # Live IPO GMP scraper & Saturday report
 │   ├── logger.py          # Loguru rotation
 │   ├── news.py            # Tech & finance news scraper
+│   ├── price_alerts.py    # Plain-English price & volatility alerts
 │   ├── retry.py           # Exponential backoff decorators
 │   ├── search.py          # DuckDuckGo live web search
+│   ├── thesis.py          # Investment thesis tracker & live P&L
 │   └── weather.py         # Open-Meteo real-time & daily forecast
 ├── assets/
 │   └── jarvis_chime.wav   # Sci-fi activation chime

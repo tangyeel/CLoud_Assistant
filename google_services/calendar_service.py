@@ -279,6 +279,7 @@ def create_event(
     description: str = "",
     location: str = "",
     attendees: list[str] | None = None,
+    all_day: bool = False,
 ) -> dict:
     """
     Create a new calendar event on the primary calendar.
@@ -293,18 +294,20 @@ def create_event(
     """
     service = build_service("calendar", "v3")
 
+    start = {"date": start_datetime} if all_day else {
+        "dateTime": start_datetime,
+        "timeZone": TIMEZONE,
+    }
+    end = {"date": end_datetime} if all_day else {
+        "dateTime": end_datetime,
+        "timeZone": TIMEZONE,
+    }
     event_body = {
         "summary": summary,
         "location": location,
         "description": description,
-        "start": {
-            "dateTime": start_datetime,
-            "timeZone": TIMEZONE,
-        },
-        "end": {
-            "dateTime": end_datetime,
-            "timeZone": TIMEZONE,
-        },
+        "start": start,
+        "end": end,
     }
 
     if attendees:
@@ -316,7 +319,7 @@ def create_event(
     return {
         "id": created["id"],
         "summary": created.get("summary"),
-        "start": created["start"].get("dateTime", start_datetime),
-        "end": created["end"].get("dateTime", end_datetime),
+        "start": created["start"].get("dateTime", created["start"].get("date", start_datetime)),
+        "end": created["end"].get("dateTime", created["end"].get("date", end_datetime)),
         "link": created.get("htmlLink", ""),
     }

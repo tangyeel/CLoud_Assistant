@@ -112,6 +112,35 @@ async def route_message(message: str, bot: Bot) -> str:
         from utils.news import format_news_card
         return format_news_card()
 
+    elif intent == "query_market":
+        from utils.finance import get_market_snapshot
+        return get_market_snapshot()
+
+    elif intent == "query_stock":
+        from utils.finance import fuzzy_resolve_stock, get_stock_details
+        company_query = params.get("company") or params.get("stock") or params.get("symbol") or message
+        name, ticker = fuzzy_resolve_stock(company_query)
+        if not ticker:
+            return f"❌ Could not identify stock for *'{company_query}'*. Try using full company name or ticker (e.g. `/stock Reliance`)."
+        return get_stock_details(ticker, company_name=name or "")
+
+    elif intent == "analyze_stock":
+        return await _handle_analyze_stock(params, message)
+
+    elif intent == "query_ipo":
+        from utils.ipo import format_ipo_card
+        return format_ipo_card()
+
+    elif intent == "manage_thesis":
+        return _handle_manage_thesis(params, message)
+
+    elif intent == "set_price_alert":
+        return _handle_set_price_alert(params, message)
+
+    elif intent == "query_alerts":
+        return _handle_query_alerts(params)
+
+
     elif intent == "search_web":
         from utils.search import search_web, get_search_context_for_ai
         q = params.get("query") or message
@@ -381,3 +410,125 @@ def _handle_general_question(question: str) -> str:
         return generate_text(question, system_instruction=GENERAL_QUESTION_SYSTEM)
     except Exception as e:
         return f"❌ AI Assistant reasoning failed: {e}"
+
+
+async def _handle_analyze_stock(params: dict, message: str) -> str:
+    """Run an AI financial fundamental analysis on a stock."""
+    from utils.finance import fuzzy_resolve_stock, build_analyst_context
+    from ai.prompts import ANALYST_SYSTEM, ANALYST_PROMPT
+
+    company_query = params.get("company") or params.get("stock") or message
+    name, ticker = fuzzy_resolve_stock(company_query)
+    if not ticker:
+        return f"❌ Could not identify stock for *'{company_query}'*. Please specify the company name (e.g. *Analyze Reliance*)."
+
+    ctx = build_analyst_context(ticker)
+    if ctx.get("error"):
+        return f"❌ Could not retrieve financial data for `{ticker}`: {ctx['error']}"
+
+    prompt = ANALYST_PROMPT.format(
+        company_name=ctx.get("name") or name,
+        ticker=ticker,
+        sector=ctx.get("sector") or "N/A",
+        industry=ctx.get("industry") or "N/A",
+        price=f"₹{ctx['price']:,.2f}" if ctx.get("price") else "N/A",
+        low_52=f"₹{ctx['52w_low']:,.2f}" if ctx.get("52w_low") else "N/A",
+        high_52=f"₹{ctx['52w_high']:,.2f}" if ctx.get("52w_high") else "N/A",
+        mkt_cap=f"₹{ctx['mkt_cap']:,}" if ctx.get("mkt_cap") else "N/A",
+        pe=f"{ctx['pe']:.2f}" if ctx.get("pe") else "N/A",
+        forward_pe=f"{ctx['forward_pe']:.2f}" if ctx.get("forward_pe") else "N/A",
+        pb=f"{ctx['pb']:.2f}" if ctx.get("pb") else "N/A",
+        roe=f"{ctx['roe']*100:.2f}%" if ctx.get("roe") else "N/A",
+        roa=f"{ctx['roa']*100:.2f}%" if ctx.get("roa") else "N/A",
+        debt_equity=f"{ctx['debt_equity']:.2f}" if ctx.get("debt_equity") else "N/A",
+        current_ratio=f"{ctx['current_ratio']:.2f}" if ctx.get("current_ratio") else "N/A",
+        fcf=f"₹{ctx['fcf']:,}" if ctx.get("fcf") else "N/A",
+        div_yield=f"{ctx['div_yield']*100:.2f}%" if ctx.get("div_yield") else "N/A",
+        beta=f"{ctx['beta']:.2f}" if ctx.get("beta") else "N/A",
+        summary=ctx.get("summary") or "Leading industry participant.",
+    )
+
+    try:
+        analysis = generate_text(prompt, system_instruction=ANALYST_SYSTEM)
+        header = f"🏛️ **Financial Intelligence Assessment: {name} ({ticker})**\n\n"
+        return header + analysis
+    except Exception as e:
+        logger.error(f"Stock analysis LLM failure: {e}")
+        return f"❌ Financial analyst generation failed: {e}"
+
+
+def _handle_manage_thesis(params: dict, message: str) -> str:
+    """Handle thesis actions: log, view, close."""
+    from utils.thesis import add_thesis, close_thesis, format_theses_card
+    action = (params.get("action") or "view").lower()
+
+    if action == "close":
+        target = params.get("company") or params.get("thesis_id") or ""
+        if not target:
+            return "Please specify the thesis ID or company name to close (e.g. `/thesis close th_123` or `/thesis close Infosys`)."
+        ok, msg = close_thesis(target)
+        return msg
+
+    elif action in ("log", "new", "add", "create"):
+        company = params.get("company") or ""
+        entry = float(params.get("entry_price") or 0)
+        target = float(params.get("target_price") or 0)
+        sl = float(params.get("stoploss") or 0) if params.get("stoploss") else None
+        rationale = params.get("rationale") or ""
+
+        if not company or target <= 0:
+            return (
+                "❌ To log an investment thesis, please provide company and target price.\n"
+                "Example: `Log thesis: Buy HDFC Bank at 1720, target 1950, stoploss 1650, rationale: NIM expansion`"
+            )
+
+        ok, msg = add_thesis(
+            query=company,
+            entry_price=entry,
+            target_price=target,
+            stoploss=sl,
+            rationale=rationale,
+        )
+        return msg
+
+    else:
+        # Default view
+        return format_theses_card()
+
+
+def _handle_set_price_alert(params: dict, message: str) -> str:
+    """Set a price alert from parsed params or fallback to natural language text."""
+    from utils.price_alerts import create_price_alert, parse_and_create_alert_from_text
+
+    company = params.get("company")
+    tgt = params.get("target_price")
+    pct = params.get("pct_change")
+    direction = params.get("direction")
+
+    if company and (tgt or pct):
+        ok, msg = create_price_alert(
+            query=company,
+            target_price=float(tgt) if tgt else None,
+            pct_change=float(pct) if pct else None,
+            direction=direction,
+            raw_instruction=message,
+        )
+        return msg
+
+    # Fallback to text parsing
+    ok, msg = parse_and_create_alert_from_text(message)
+    return msg
+
+
+def _handle_query_alerts(params: dict) -> str:
+    """List or cancel price alerts."""
+    from utils.price_alerts import list_alerts_card, cancel_alert
+    action = (params.get("action") or "view").lower()
+    if action == "cancel":
+        aid = params.get("alert_id") or params.get("company") or ""
+        if not aid:
+            return "Please specify the alert ID or company to cancel (e.g. `/alerts cancel alt_123`)."
+        ok, msg = cancel_alert(aid)
+        return msg
+    return list_alerts_card()
+

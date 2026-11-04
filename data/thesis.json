@@ -1,0 +1,16 @@
+[
+  {
+    "id": "th_ed240c",
+    "ticker": "INFY.NS",
+    "company": "Infy",
+    "entry_price": 1850.0,
+    "target_price": 2100.0,
+    "stoploss": 1750.0,
+    "rationale": "Cloud margin acceleration",
+    "created_at": "2026-11-04T23:52:48.652927+05:30",
+    "status": "CLOSED",
+    "target_hit": false,
+    "stoploss_hit": false,
+    "closed_at": "2026-11-04T23:53:50.667805+05:30"
+  }
+]

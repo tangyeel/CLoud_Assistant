@@ -37,3 +37,9 @@ tenacity>=9.0.0
 
 # --- Logging ---
 loguru>=0.7.0
+
+# --- Finance & Market Intelligence ---
+yfinance>=0.2.40
+rapidfuzz>=3.9.0
+beautifulsoup4>=4.12.0
+

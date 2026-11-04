@@ -40,9 +40,15 @@ from bot.handlers import (
     cmd_attendance,
     cmd_news,
     cmd_search,
+    cmd_market,
+    cmd_stock,
+    cmd_ipo,
+    cmd_thesis,
+    cmd_alerts,
     handle_callback_query,
     handle_text_message,
     handle_voice_message,
+    handle_exam_schedule_photo,
 )
 from scheduler.jobs import start_scheduler, stop_scheduler, set_bot
 from utils.health import health_check
@@ -97,12 +103,21 @@ def build_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("attendance", cmd_attendance))
     app.add_handler(CommandHandler("news", cmd_news))
     app.add_handler(CommandHandler("search", cmd_search))
+    app.add_handler(CommandHandler("market", cmd_market))
+    app.add_handler(CommandHandler("stock", cmd_stock))
+    app.add_handler(CommandHandler("ipo", cmd_ipo))
+    app.add_handler(CommandHandler("thesis", cmd_thesis))
+    app.add_handler(CommandHandler("alerts", cmd_alerts))
+
 
     # Register interactive callback query handler for inline button taps
     app.add_handler(CallbackQueryHandler(handle_callback_query))
 
     # Register voice note handler (Two-Way Voice via Groq Whisper STT)
     app.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
+
+    # Read exam timetables sent as Telegram photos.
+    app.add_handler(MessageHandler(filters.PHOTO, handle_exam_schedule_photo))
 
     # Register conversational natural language message handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))

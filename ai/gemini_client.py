@@ -522,3 +522,41 @@ def generate_json(prompt: str, system_instruction: str = "") -> dict:
             attempted.append(f"{name} ({model}) - {e}")
 
     raise RuntimeError(f"All configured AI providers failed to generate valid JSON. Attempts: {'; '.join(attempted)}")
+
+
+def read_exam_schedule_image(image_bytes: bytes, mime_type: str, today: str) -> dict:
+    """Extract exam dates from an image using the configured Gemini vision model."""
+    if not gemini_available:
+        raise RuntimeError("Photo reading needs GEMINI_API_KEY configured.")
+
+    import google.generativeai as genai
+
+    prompt = (
+        "Read this exam timetable and return only JSON with this shape: "
+        '{"exams":[{"subject":"string","date":"YYYY-MM-DD",'
+        '"start_time":"HH:MM or null","end_time":"HH:MM or null",'
+        '"location":"string or null"}],"uncertain":["text"]}. '
+        f"Today is {today}. If a year is omitted, use the nearest upcoming occurrence. "
+        "Do not guess unreadable subjects, dates, or times; put uncertainties in uncertain. "
+        "Use 24-hour time. Include every legible exam row."
+    )
+    models = list(dict.fromkeys([GEMINI_MODEL, "gemini-3.8-flash", "gemini-2.5-flash"]))
+    errors = []
+    for model_name in models:
+        if not model_name:
+            continue
+        try:
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                generation_config={"temperature": 0.1, "response_mime_type": "application/json"},
+            )
+            result = model.generate_content([
+                prompt,
+                {"mime_type": mime_type, "data": image_bytes},
+            ])
+            if result and result.text:
+                return _extract_json_dict(result.text)
+        except Exception as e:
+            errors.append(f"{model_name}: {e}")
+            logger.warning(f"Gemini vision [{model_name}] failed: {e}")
+    raise RuntimeError("Could not read the exam schedule image. " + "; ".join(errors))
