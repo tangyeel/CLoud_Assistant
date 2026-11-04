@@ -72,6 +72,7 @@
 │   ├── health.py          # /health endpoint for 24/7 uptime pings
 │   ├── ipo.py             # Live IPO GMP scraper & Saturday report
 │   ├── logger.py          # Loguru rotation
+│   ├── memory.py          # 4-Layer Cognitive Vector Memory & Reflection
 │   ├── news.py            # Tech & finance news scraper
 │   ├── price_alerts.py    # Plain-English price & volatility alerts
 │   ├── retry.py           # Exponential backoff decorators

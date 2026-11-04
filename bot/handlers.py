@@ -61,7 +61,8 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /ipo — Upcoming & open IPOs with issue price, GMP & subscription status\n"
         "• /thesis — Investment thesis portfolio & live P&L tracker\n"
         "• /alerts — Manage live price & percentage volatility alerts\n"
-        "• /search <query> — Real-time free web search\n"
+        "• /memory — View what J.A.R.V.I.S. has learned and remembered about you\n"
+        "• /forget <topic> — Erase a fact, topic, or preference from long-term memory\n"
         "• /search <query> — Real-time free web search\n"
         "• /emails — Unread priority emails across Personal & Thapar\n"
         "• /classes — Google Classroom assignments & deadlines\n"
@@ -232,6 +233,31 @@ async def cmd_alerts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     else:
         card = list_alerts_card()
         await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_memory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /memory — list learned facts and persistent preferences."""
+    from utils.memory import list_all_memories
+    card = list_all_memories()
+    await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_forget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /forget <topic> — purge specific memories."""
+    query = " ".join(context.args) if context.args else ""
+    if not query:
+        await update.effective_message.reply_text(
+            "Please specify what you would like me to forget, e.g. `/forget Tata Motors` or `/forget risk tolerance`",
+            parse_mode="Markdown",
+        )
+        return
+
+    from utils.memory import forget_memory
+    ok, msg = forget_memory(query)
+    await update.effective_message.reply_text(msg, parse_mode="Markdown")
+
 
 
 

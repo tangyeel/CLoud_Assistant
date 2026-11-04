@@ -50,13 +50,27 @@ def _normalize_params(parsed: dict) -> dict:
 async def route_message(message: str, bot: Bot) -> str:
     """
     Parse a natural language text command and execute the corresponding action.
+    Integrated with 4-Layer Cognitive Memory (Working Memory, Recall, Reflection).
     """
+    import asyncio
+    from utils.memory import (
+        working_memory,
+        recall_relevant_memories,
+        format_memories_for_prompt,
+        reflect_and_memorize,
+    )
+
+    # 1. Update Working Memory & Recall Relevant Semantic Memories
+    working_memory.add_turn("user", message)
+    recalled_mems = recall_relevant_memories(message, top_k=3)
+    recalled_context = format_memories_for_prompt(recalled_mems)
+
     tz = ZoneInfo(TIMEZONE)
     now = datetime.now(tz)
     today_str = now.strftime("%Y-%m-%d")
     current_time_str = now.strftime("%H:%M")
 
-    # 1. Parse intent using AI
+    # 2. Parse intent using AI
     intent = "unknown"
     params = {}
 
@@ -75,107 +89,131 @@ async def route_message(message: str, bot: Bot) -> str:
         intent = "general_question"
         params = {"question": message}
 
-    # 2. Dispatch to specific handlers
+    reply = ""
+
+    # 3. Dispatch to specific handlers
     if intent == "schedule_event":
-        return await _handle_schedule_event(params)
+        reply = await _handle_schedule_event(params)
 
     elif intent == "create_task":
-        return await _handle_create_task(params)
+        reply = await _handle_create_task(params)
 
     elif intent == "query_emails":
-        return await _handle_query_emails(params)
+        reply = await _handle_query_emails(params)
 
     elif intent == "query_calendar":
-        return await _handle_query_calendar(params)
+        reply = await _handle_query_calendar(params)
 
     elif intent == "query_tasks":
         from bot.handlers import get_tasks_with_buttons
-        return get_tasks_with_buttons()
+        reply = get_tasks_with_buttons()
 
     elif intent == "query_classroom":
-        return _handle_query_classroom()
+        reply = _handle_query_classroom()
 
     elif intent == "complete_task":
-        return _handle_complete_task(params)
+        reply = _handle_complete_task(params)
 
     elif intent == "query_attendance":
         from utils.attendance import format_attendance_card
-        return format_attendance_card()
+        reply = format_attendance_card()
 
     elif intent == "query_weather":
         from utils.weather import get_weather
         city = params.get("city")
         w = get_weather(city)
-        return w["text_card"]
+        reply = w["text_card"]
 
     elif intent == "query_news":
         from utils.news import format_news_card
-        return format_news_card()
+        reply = format_news_card()
 
     elif intent == "query_market":
         from utils.finance import get_market_snapshot
-        return get_market_snapshot()
+        reply = get_market_snapshot()
 
     elif intent == "query_stock":
         from utils.finance import fuzzy_resolve_stock, get_stock_details
         company_query = params.get("company") or params.get("stock") or params.get("symbol") or message
         name, ticker = fuzzy_resolve_stock(company_query)
         if not ticker:
-            return f"❌ Could not identify stock for *'{company_query}'*. Try using full company name or ticker (e.g. `/stock Reliance`)."
-        return get_stock_details(ticker, company_name=name or "")
+            reply = f"❌ Could not identify stock for *'{company_query}'*. Try using full company name or ticker (e.g. `/stock Reliance`)."
+        else:
+            reply = get_stock_details(ticker, company_name=name or "")
 
     elif intent == "analyze_stock":
-        return await _handle_analyze_stock(params, message)
+        reply = await _handle_analyze_stock(params, message)
 
     elif intent == "query_ipo":
         from utils.ipo import format_ipo_card
-        return format_ipo_card()
+        reply = format_ipo_card()
 
     elif intent == "manage_thesis":
-        return _handle_manage_thesis(params, message)
+        reply = _handle_manage_thesis(params, message)
 
     elif intent == "set_price_alert":
-        return _handle_set_price_alert(params, message)
+        reply = _handle_set_price_alert(params, message)
 
     elif intent == "query_alerts":
-        return _handle_query_alerts(params)
+        reply = _handle_query_alerts(params)
 
+    elif intent == "query_memory":
+        from utils.memory import list_all_memories
+        reply = list_all_memories()
+
+    elif intent == "forget_memory":
+        from utils.memory import forget_memory
+        topic = params.get("topic") or message.replace("forget", "").replace("delete", "").strip()
+        ok, msg = forget_memory(topic)
+        reply = msg
 
     elif intent == "search_web":
         from utils.search import search_web, get_search_context_for_ai
         q = params.get("query") or message
         results = search_web(q, max_results=3)
         if not results:
-            return f"🔍 No relevant results found on the web for *'{q}'*."
-        context_str = get_search_context_for_ai(q)
-        prompt = (
-            f"User asked: '{q}'\n\n"
-            f"Live web search results:\n{context_str}\n\n"
-            f"Provide a concise, factual, polite answer (2-3 sentences) directly answering the user. "
-            f"Tone: J.A.R.V.I.S., polite ('sir')."
-        )
-        try:
-            ai_ans = generate_text(prompt, system_instruction=GENERAL_QUESTION_SYSTEM)
-        except Exception:
-            ai_ans = results[0]["snippet"]
-        links = "\n".join([f"• [{r['title']}]({r['url']})" for r in results[:2]])
-        return f"{ai_ans}\n\n🔗 **Sources:**\n{links}"
+            reply = f"🔍 No relevant results found on the web for *'{q}'*."
+        else:
+            context_str = get_search_context_for_ai(q)
+            prompt = (
+                f"User asked: '{q}'\n\n"
+                f"Live web search results:\n{context_str}\n\n"
+                f"Provide a concise, factual, polite answer (2-3 sentences) directly answering the user. "
+                f"Tone: J.A.R.V.I.S., polite ('sir')."
+            )
+            try:
+                ai_ans = generate_text(prompt, system_instruction=GENERAL_QUESTION_SYSTEM)
+            except Exception:
+                ai_ans = results[0]["snippet"]
+            links = "\n".join([f"• [{r['title']}]({r['url']})" for r in results[:2]])
+            reply = f"{ai_ans}\n\n🔗 **Sources:**\n{links}"
 
     elif intent == "morning_report":
         from reports.morning import run_morning_report
         await run_morning_report(bot)
-        return "🌅 Your morning voice briefing has been generated and sent above."
+        reply = "🌅 Your morning voice briefing has been generated and sent above."
 
     elif intent == "evening_report":
         from reports.evening import run_evening_report
         await run_evening_report(bot)
-        return "🌙 Your evening wind-down report has been generated and sent above."
+        reply = "🌙 Your evening wind-down report has been generated and sent above."
 
     elif intent == "general_question":
-        return _handle_general_question(params.get("question", message))
+        reply = _handle_general_question(params.get("question", message), recalled_context=recalled_context)
 
     else:
-        return _handle_general_question(message)
+        reply = _handle_general_question(message, recalled_context=recalled_context)
+
+    # 4. Record Assistant Turn & Trigger Background Reflection
+    try:
+        reply_text = reply[0] if isinstance(reply, tuple) else str(reply)
+        working_memory.add_turn("assistant", reply_text)
+        asyncio.create_task(reflect_and_memorize(message, reply_text))
+    except Exception as e:
+        logger.debug(f"Memory post-processing skipped: {e}")
+
+    return reply
+
 
 
 async def _handle_schedule_event(params: dict) -> str:
@@ -404,12 +442,24 @@ def _handle_complete_task(params: dict) -> str:
         return f"❌ Could not complete task: {e}"
 
 
-def _handle_general_question(question: str) -> str:
-    """Answer general queries using Gemini AI."""
+def _handle_general_question(question: str, recalled_context: str = "") -> str:
+    """Answer general queries using AI cascade, augmented with Working Memory & Recalled Facts."""
     try:
-        return generate_text(question, system_instruction=GENERAL_QUESTION_SYSTEM)
+        from utils.memory import working_memory
+        recent_history = working_memory.get_context_string(max_turns=6)
+
+        system_instruction = GENERAL_QUESTION_SYSTEM
+        if recalled_context:
+            system_instruction = f"{GENERAL_QUESTION_SYSTEM}\n\n{recalled_context}"
+
+        user_content = question
+        if recent_history:
+            user_content = f"Recent conversation flow:\n{recent_history}\n\nCurrent query: {question}"
+
+        return generate_text(user_content, system_instruction=system_instruction)
     except Exception as e:
         return f"❌ AI Assistant reasoning failed: {e}"
+
 
 
 async def _handle_analyze_stock(params: dict, message: str) -> str:

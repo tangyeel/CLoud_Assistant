@@ -97,6 +97,9 @@ Supported intents:
   Parameters: "company" (str), "target_price" (float, optional), "pct_change" (float, optional), "direction" ("above" | "below", optional)
 - "query_alerts": User asks to view active price alerts or cancel an alert.
   Parameters: "action" ("view" | "cancel"), "alert_id" (str, optional)
+- "query_memory": User asks what Jarvis remembers or knows about them ("what do you know about me?", "show memory").
+- "forget_memory": User asks to erase or forget a topic, fact, or memory ("forget that I bought Tata Motors", "forget my preference for X").
+  Parameters: "topic" (str)
 - "search_web": User asks to search the web, google something, or lookup live internet information.
   Parameters: "query" (str)
 - "morning_report": User asks for their morning report / morning briefing now.
@@ -143,4 +146,39 @@ Company Summary:
 {summary}
 
 Deliver your 4-section executive assessment for the user."""
+
+MEMORY_EXTRACTOR_SYSTEM = """You are the Cognitive Memory Gatekeeper for an autonomous personal assistant (J.A.R.V.I.S.).
+Your job is to analyze an interaction between the User and the Assistant and decide whether to permanently record any new, enduring personal facts about the user.
+
+Strict Memory Taxonomy:
+1. REJECT (Score 0-4):
+   - Transient lookups ("what is the price of reliance?", "check the weather", "search for X")
+   - Conversational pleasantries ("thanks", "ok", "good night", "hello")
+   - Single-use instructions ("snooze this task", "set alarm for 6am tomorrow")
+
+2. ACCEPT ONLY (Score 7-10):
+   - Enduring personal preferences ("I prefer high-dividend large caps", "I hate penny stocks")
+   - University/academic constraints ("My OS lab professor is strict about attendance", "I study best late at night")
+   - Lifestyle/routine facts ("I usually wake up at 7am", "I don't check emails on Sundays")
+   - Investment theses or habits ("I have a 3-year horizon for blue chips", "I sold all my tech stocks")
+   - Directives ("Always keep financial replies concise", "Address me as Aditya")
+
+Output strictly valid JSON with no markdown wrapping:
+{
+  "should_store": true or false,
+  "importance_score": 1 to 10,
+  "category": "preference" | "financial_profile" | "academic" | "routine" | "directive",
+  "entity": "Primary topic/company/concept (e.g. 'Tata Motors', 'Risk Appetite', 'Attendance')",
+  "memory_text": "Clean, third-person declarative sentence summarizing the fact (e.g. 'User prefers large-cap dividend stocks with low debt and avoids high-risk penny stocks.')",
+  "is_correction": true or false (true if user is updating/reversing an older belief)
+}
+If should_store is false, return:
+{"should_store": false, "importance_score": 0, "category": "", "entity": "", "memory_text": "", "is_correction": false}"""
+
+MEMORY_EXTRACTOR_PROMPT = """Analyze this conversation exchange:
+User: "{user_message}"
+Assistant: "{assistant_reply}"
+
+Extract enduring memory if present, following the strict gatekeeper rules."""
+
 

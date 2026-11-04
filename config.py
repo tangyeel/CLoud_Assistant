@@ -134,6 +134,13 @@ SATURDAY_IPO_HOUR: int = int(os.getenv("SATURDAY_IPO_HOUR", "8"))
 SATURDAY_IPO_MINUTE: int = int(os.getenv("SATURDAY_IPO_MINUTE", "0"))
 PRICE_ALERT_CHECK_MINUTES: int = int(os.getenv("PRICE_ALERT_CHECK_MINUTES", "5"))
 
+# --- Cognitive Memory (Upstash Vector Serverless DB) ---
+UPSTASH_VECTOR_REST_URL: str = _get_env("UPSTASH_VECTOR_REST_URL", default="")
+UPSTASH_VECTOR_REST_TOKEN: str = _get_env("UPSTASH_VECTOR_REST_TOKEN", default="")
+MEMORY_SIMILARITY_THRESHOLD: float = float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.78"))
+MEMORY_GATEKEEPER_THRESHOLD: int = int(os.getenv("MEMORY_GATEKEEPER_THRESHOLD", "7"))
+
+
 
 # --- Server / Host ---
 PORT: int = int(os.getenv("PORT", "8000"))

@@ -45,6 +45,8 @@ from bot.handlers import (
     cmd_ipo,
     cmd_thesis,
     cmd_alerts,
+    cmd_memory,
+    cmd_forget,
     handle_callback_query,
     handle_text_message,
     handle_voice_message,
@@ -108,6 +110,9 @@ def build_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("ipo", cmd_ipo))
     app.add_handler(CommandHandler("thesis", cmd_thesis))
     app.add_handler(CommandHandler("alerts", cmd_alerts))
+    app.add_handler(CommandHandler("memory", cmd_memory))
+    app.add_handler(CommandHandler("forget", cmd_forget))
+
 
 
     # Register interactive callback query handler for inline button taps
