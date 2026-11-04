@@ -8,13 +8,14 @@
 ## 🌟 Key Capabilities
 
 ### 🎙️ Proactive Audio Briefings & Two-Way Voice
-* **Morning Briefing (07:30 IST):** Jarvis synthesizes a morning radio-style report covering your day's schedule, unread emails, classroom assignments, to-dos, and real-time Patiala weather with rain probability.
-* **Evening Briefing (21:00 IST):** A forward-looking wind-down debrief focused on tomorrow's earliest commitments, looming deadlines, and commute weather forecast.
+* **Morning Briefing (06:30 IST):** Jarvis synthesizes a morning radio-style report covering your day's schedule, unread emails, classroom assignments, to-dos, and real-time Patiala weather with rain probability.
+* **Evening Briefing (20:00 IST):** A forward-looking wind-down debrief focused on tomorrow's earliest commitments, looming deadlines, and commute weather forecast.
 * **Two-Way Voice (Whisper STT + Edge-TTS):** Send voice notes on Telegram while walking across campus. Groq Whisper (`whisper-large-v3-turbo`) transcribes in ~0.25s, executes your command, and replies with a British neural voice note prepended with an authentic sci-fi activation chime.
 
 ### 🎓 Academic & Timetable Safeguards (Thapar University)
 * **Dual-Account Google Workspace:** Queries your Personal account (`token.json`) and University account (`token_thapar.json`) simultaneously.
 * **15-Minute "Time-to-Leave" Alerts:** Background cron checks your calendar 10–18 minutes before classes start (e.g. *LT10, B304, C328*) and sends a notification to leave on time.
+* **Deadline Alerts:** Checks pending Google Tasks and dated Classroom assignments every 10 minutes; sends reminders about 24 hours and 2 hours before the deadline.
 * **Calendar Conflict Guard:** Intercepts overlapping bookings (e.g. *"Book gym tomorrow at 9 AM"*), alerts you to conflicting lectures, and auto-suggests the next open daytime slot.
 * **75% Attendance Safeguard (`/attendance`):** Tracks attended vs. total classes per course, calculating **safe bunks remaining** or **consecutive lectures required** to maintain the 75% threshold. Prompts with a 1-tap poll at 14:05 daily.
 

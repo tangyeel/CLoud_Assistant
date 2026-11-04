@@ -120,10 +120,14 @@ os.makedirs(AUDIO_OUTPUT_DIR, exist_ok=True)
 
 # --- Scheduler Configuration ---
 TIMEZONE: str = os.getenv("TIMEZONE", "Asia/Kolkata")
-MORNING_REPORT_HOUR: int = int(os.getenv("MORNING_REPORT_HOUR", "7"))
+MORNING_REPORT_HOUR: int = int(os.getenv("MORNING_REPORT_HOUR", "6"))
 MORNING_REPORT_MINUTE: int = int(os.getenv("MORNING_REPORT_MINUTE", "30"))
-EVENING_REPORT_HOUR: int = int(os.getenv("EVENING_REPORT_HOUR", "21"))
+EVENING_REPORT_HOUR: int = int(os.getenv("EVENING_REPORT_HOUR", "20"))
 EVENING_REPORT_MINUTE: int = int(os.getenv("EVENING_REPORT_MINUTE", "0"))
+DEADLINE_ALERT_HOURS: list[int] = [
+    int(value) for value in os.getenv("DEADLINE_ALERT_HOURS", "24,2").split(",") if value.strip()
+]
+DEADLINE_ALERT_CHECK_MINUTES: int = int(os.getenv("DEADLINE_ALERT_CHECK_MINUTES", "10"))
 
 # --- Server / Host ---
 PORT: int = int(os.getenv("PORT", "8000"))

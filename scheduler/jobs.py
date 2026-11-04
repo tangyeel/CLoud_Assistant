@@ -10,6 +10,8 @@ from config import (
     MORNING_REPORT_MINUTE,
     EVENING_REPORT_HOUR,
     EVENING_REPORT_MINUTE,
+    DEADLINE_ALERT_HOURS,
+    DEADLINE_ALERT_CHECK_MINUTES,
     TELEGRAM_CHAT_ID,
     SEND_ERROR_ALERTS,
 )
@@ -80,7 +82,7 @@ async def _cleanup_job():
     cleanup_audio_files(max_age_hours=12)
 
 
-# Cache of alerted event IDs to avoid repeated reminders
+# Cache of alerted calendar items to avoid repeats during this process lifetime.
 _alerted_event_ids: set[str] = set()
 
 
@@ -101,8 +103,11 @@ async def _check_upcoming_commitments():
         events = get_todays_events()
 
         for ev in events:
-            ev_id = ev.get("id")
-            if not ev_id or ev_id in _alerted_event_ids:
+            raw_event_id = ev.get("id")
+            if not raw_event_id:
+                continue
+            ev_id = f"{ev.get('account', 'default')}:{raw_event_id}"
+            if ev_id in _alerted_event_ids:
                 continue
 
             start_raw = ev.get("start")
@@ -121,21 +126,22 @@ async def _check_upcoming_commitments():
                     _alerted_event_ids.add(ev_id)
                     time_str = ev_dt.strftime("%I:%M %p")
                     loc = ev.get("location")
-                    loc_str = f"📍 Location: **{loc}**\n" if loc else ""
+                    loc_str = f"📍 Location: {loc}\n" if loc else ""
+                    is_class = ev.get("account") == "thapar"
+                    alert_title = "🎓 Class Alert: Time to Leave!" if is_class else "⏰ Reminder: Time to Leave!"
 
                     msg = (
-                        f"⏰ **15-Minute Alert: Time to Leave!**\n\n"
-                        f"📌 **{ev['summary']}**\n"
+                        f"{alert_title}\n\n"
+                        f"📌 {ev['summary']}\n"
                         f"{loc_str}"
-                        f"🕒 Starts at: **{time_str}** (~{int(diff_min)} mins remaining)\n\n"
+                        f"🕒 Starts at: {time_str} (~{int(diff_min)} mins remaining)\n\n"
                         f"Head out now to arrive comfortably on time, sir."
                     )
                     await _bot_instance.send_message(
                         chat_id=TELEGRAM_CHAT_ID,
                         text=msg,
-                        parse_mode="Markdown"
                     )
-                    logger.info(f"✅ Dispatched 15-min Time-to-Leave alert for '{ev['summary']}'.")
+                    logger.info(f"✅ Dispatched {'class' if is_class else 'calendar'} alert for '{ev['summary']}'.")
             except Exception as parse_err:
                 logger.debug(f"Event time parse skip: {parse_err}")
 
@@ -165,6 +171,72 @@ async def _attendance_daily_poll():
         logger.info("✅ Sent daily attendance poll.")
     except Exception as e:
         logger.warning(f"Daily attendance poll error: {e}")
+
+
+_sent_deadline_alerts: set[tuple[str, str, str, int]] = set()
+
+
+async def _check_deadlines():
+    """Send each pending task/coursework alert once per configured lead time."""
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    from datetime import datetime, timedelta
+    from google_services.tasks_service import get_pending_tasks
+    from google_services.classroom_service import get_all_upcoming_assignments
+
+    tz = ZoneInfo(TIMEZONE)
+    now = datetime.now(tz)
+    sources = []
+    try:
+        sources.extend(("Task", item.get("id", ""), item.get("title", "Task"), item.get("due"), "")
+                       for item in get_pending_tasks())
+    except Exception as e:
+        logger.warning(f"Could not check task deadlines: {e}")
+    try:
+        assignments = get_all_upcoming_assignments(max_per_course=100)
+        sources.extend(("Classroom", item.get("id", ""), item.get("title", "Assignment"),
+                        item.get("due_date"), item.get("course_name", "")) for item in assignments)
+    except Exception as e:
+        logger.warning(f"Could not check Classroom deadlines: {e}")
+
+    for source, item_id, title, due_raw, course in sources:
+        if not item_id or not due_raw:
+            continue
+        try:
+            due_text = str(due_raw)
+            due = datetime.fromisoformat(due_text.replace("Z", "+00:00"))
+            if due.tzinfo is None:
+                # Classroom due dates without a time mean the end of that local day.
+                if source == "Classroom" and len(due_text) == 10:
+                    due += timedelta(days=1) - timedelta(seconds=1)
+                due = due.replace(tzinfo=tz)
+            due = due.astimezone(tz)
+        except (TypeError, ValueError):
+            continue
+
+        minutes_left = (due - now).total_seconds() / 60
+        for lead_hours in DEADLINE_ALERT_HOURS:
+            lead_minutes = lead_hours * 60
+            if not (lead_minutes - DEADLINE_ALERT_CHECK_MINUTES < minutes_left <= lead_minutes):
+                continue
+            key = (source, f"{course}:{item_id}", due.isoformat(), lead_hours)
+            if key in _sent_deadline_alerts:
+                continue
+            _sent_deadline_alerts.add(key)
+            when = due.strftime("%a, %b %d at %I:%M %p")
+            course_line = f"\n📚 Course: **{course}**" if course else ""
+            try:
+                await _bot_instance.send_message(
+                    chat_id=TELEGRAM_CHAT_ID,
+                    text=(f"⏳ Deadline in about {lead_hours}h\n\n"
+                          f"{'📝' if source == 'Task' else '🎓'} {title}{course_line}\n"
+                          f"📅 Due: {when}"),
+                )
+                logger.info(f"Sent {lead_hours}h {source} deadline alert for '{title}'.")
+            except Exception as e:
+                _sent_deadline_alerts.discard(key)
+                logger.warning(f"Could not send deadline alert for '{title}': {e}")
 
 
 def _job_error_listener(event):
@@ -228,6 +300,14 @@ def start_scheduler():
         hour=14,
         minute=5,
         id="attendance_daily_poll",
+        replace_existing=True,
+    )
+
+    scheduler.add_job(
+        _check_deadlines,
+        trigger="interval",
+        minutes=DEADLINE_ALERT_CHECK_MINUTES,
+        id="deadline_alerts",
         replace_existing=True,
     )
 

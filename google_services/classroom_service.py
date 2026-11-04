@@ -89,7 +89,7 @@ def get_coursework(course_id: str, account: str = "default", max_results: int = 
 
 
 @retry_on_failure(max_retries=3, base_delay=1.5)
-def get_all_upcoming_assignments() -> list[dict]:
+def get_all_upcoming_assignments(max_per_course: int = 5) -> list[dict]:
     """
     Aggregate all upcoming assignments across all active courses (Personal + Thapar).
     """
@@ -99,7 +99,7 @@ def get_all_upcoming_assignments() -> list[dict]:
     for course in courses:
         try:
             acc = course.get("account", "default")
-            items = get_coursework(course["id"], account=acc, max_results=5)
+            items = get_coursework(course["id"], account=acc, max_results=max_per_course)
             for item in items:
                 item["course_name"] = course["name"]
             all_assignments.extend(items)

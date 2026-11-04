@@ -149,6 +149,8 @@ async def lifespan(app: Starlette):
     if ptb_app:
         await ptb_app.initialize()
         await ptb_app.start()
+        set_bot(ptb_app.bot)
+        start_scheduler()
 
         if TELEGRAM_WEBHOOK_URL:
             clean_url = TELEGRAM_WEBHOOK_URL.rstrip("/")
@@ -168,6 +170,7 @@ async def lifespan(app: Starlette):
     if ptb_app:
         if not TELEGRAM_WEBHOOK_URL and ptb_app.updater and ptb_app.updater.running:
             await ptb_app.updater.stop()
+        stop_scheduler()
         await ptb_app.stop()
         await ptb_app.shutdown()
     logger.info("👋 Assistant offline.")

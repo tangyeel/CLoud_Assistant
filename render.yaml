@@ -25,5 +25,15 @@ services:
         value: en-US-ChristopherNeural
       - key: TIMEZONE
         value: Asia/Kolkata
+      - key: MORNING_REPORT_HOUR
+        value: "6"
+      - key: MORNING_REPORT_MINUTE
+        value: "30"
+      - key: EVENING_REPORT_HOUR
+        value: "20"
+      - key: EVENING_REPORT_MINUTE
+        value: "0"
+      - key: DEADLINE_ALERT_HOURS
+        value: "24,2"
       - key: PORT
         value: "8000"
