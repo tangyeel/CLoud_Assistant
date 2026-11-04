@@ -157,6 +157,33 @@ async def route_message(message: str, bot: Bot) -> str:
     elif intent == "query_alerts":
         reply = _handle_query_alerts(params)
 
+    elif intent == "manage_watchlist":
+        from utils.earnings import format_watchlist_card, add_to_watchlist, remove_from_watchlist
+        action = (params.get("action") or "view").lower()
+        stocks = params.get("stocks") or params.get("company") or ""
+        if action in ("add", "new") and stocks:
+            count, added, msg = add_to_watchlist(stocks)
+            reply = msg
+        elif action in ("remove", "delete", "del") and stocks:
+            ok, msg = remove_from_watchlist(stocks)
+            reply = msg
+        else:
+            reply = format_watchlist_card()
+
+    elif intent == "query_earnings":
+        from utils.earnings import triage_stock_earnings, format_watchlist_card
+        from utils.finance import fuzzy_resolve_stock
+        stock_query = params.get("company") or params.get("stock") or ""
+        if stock_query:
+            name, ticker = fuzzy_resolve_stock(stock_query)
+            if ticker:
+                reply = triage_stock_earnings(ticker, company_name=name or "")
+            else:
+                reply = f"❌ Could not resolve *'{stock_query}'* to an active stock. Try the full company name."
+        else:
+            reply = format_watchlist_card()
+
+
     elif intent == "query_memory":
         from utils.memory import list_all_memories
         reply = list_all_memories()

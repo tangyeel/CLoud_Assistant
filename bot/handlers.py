@@ -73,6 +73,15 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "    - View active: `/alerts`\n"
         "    - Cancel: `/alerts cancel alt_123` or `/alerts cancel Reliance`\n"
         "    - Set in plain English: *'Alert me when Infosys hits 1900'* or *'Alert if Nifty drops 2%'*\n\n"
+        "• `/watchlist [add | remove]`\n"
+        "  ↳ *Description:* Manage your custom earnings watchlist. Only tracks quarterly results and sends autonomous alerts for stocks on this list.\n"
+        "  ↳ *Usage:*\n"
+        "    - View watchlist & earnings countdown: `/watchlist`\n"
+        "    - Add stocks: `/watchlist add Reliance, Infosys, Tata Motors`\n"
+        "    - Remove stock: `/watchlist remove TCS`\n\n"
+        "• `/earnings [stock]`\n"
+        "  ↳ *Description:* Autonomous quarterly earnings triage. Evaluates Revenue, Operating Margin, Net Profit, and Consensus Beat/Miss percentage. Cross-checks against your active investment theses.\n"
+        "  ↳ *Usage:* `/earnings Infosys` or `/earnings` (triages all watchlist stocks)\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "🧠 **COGNITIVE MEMORY & REASONING**\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
@@ -302,6 +311,68 @@ async def cmd_forget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     from utils.memory import forget_memory
     ok, msg = forget_memory(query)
     await update.effective_message.reply_text(msg, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_watchlist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /watchlist — view, add, or remove tracked stocks for earnings triage."""
+    args = context.args or []
+    from utils.earnings import format_watchlist_card, add_to_watchlist, remove_from_watchlist
+
+    if not args:
+        card = format_watchlist_card()
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+        return
+
+    subcmd = args[0].lower()
+    if subcmd in ("add", "new") and len(args) > 1:
+        raw_stocks = " ".join(args[1:])
+        count, added, msg = add_to_watchlist(raw_stocks)
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    elif subcmd in ("remove", "del", "delete", "rm") and len(args) > 1:
+        target = " ".join(args[1:])
+        ok, msg = remove_from_watchlist(target)
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    else:
+        # Default: if user typed `/watchlist reliance` without typing 'add'
+        raw_stocks = " ".join(args)
+        count, added, msg = add_to_watchlist(raw_stocks)
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_earnings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /earnings [stock] — autonomous quarterly results triage."""
+    args = context.args or []
+    from utils.earnings import triage_stock_earnings, get_watchlist
+    from utils.finance import fuzzy_resolve_stock
+
+    if args:
+        stock_query = " ".join(args)
+        name, ticker = fuzzy_resolve_stock(stock_query)
+        if not ticker:
+            await update.effective_message.reply_text(
+                f"❌ Could not resolve *'{stock_query}'* to an active stock. Try the full company name (e.g. `/earnings Infosys`).",
+                parse_mode="Markdown",
+            )
+            return
+        triage_card = triage_stock_earnings(ticker, company_name=name or "")
+        await update.effective_message.reply_text(triage_card, parse_mode="Markdown")
+    else:
+        # Triage all watchlist stocks
+        watchlist = get_watchlist()
+        if not watchlist:
+            await update.effective_message.reply_text(
+                "Your earnings watchlist is empty, sir. Add stocks using `/watchlist add <name>` (e.g. `/watchlist add Reliance, INFY`) or check a specific stock with `/earnings <name>`.",
+                parse_mode="Markdown",
+            )
+            return
+
+        await update.effective_message.reply_text(f"📊 Running autonomous earnings triage on your **{len(watchlist)} watchlist stocks**...")
+        for w in watchlist[:5]:
+            card = triage_stock_earnings(w["ticker"], w["company"])
+            await update.effective_message.reply_text(card, parse_mode="Markdown")
+
 
 
 

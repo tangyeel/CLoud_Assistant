@@ -315,6 +315,25 @@ async def _check_market_alerts_job():
         logger.warning(f"Error checking market alerts: {e}")
 
 
+async def _check_watchlist_earnings_job():
+    """Scan watchlist companies for earnings declarations or T-1 heads-up at 17:30 IST."""
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.earnings import check_watchlist_earnings_updates
+        updates = check_watchlist_earnings_updates()
+        for note in updates:
+            await _bot_instance.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=note,
+                parse_mode="Markdown",
+            )
+            logger.info("Dispatched watchlist earnings notification to Telegram.")
+    except Exception as e:
+        logger.warning(f"Watchlist earnings scan error: {e}")
+
+
 def _job_error_listener(event):
     if event.exception:
         logger.error(f"Scheduler job error in '{event.job_id}': {event.exception}", exc_info=True)
@@ -419,6 +438,20 @@ def start_scheduler():
     logger.info(
         f"🔔 Market price alerts monitor active (every {PRICE_ALERT_CHECK_MINUTES} mins)"
     )
+
+    # Watchlist Earnings Triage Scanner (17:30 IST Mon-Fri post-market)
+    scheduler.add_job(
+        _check_watchlist_earnings_job,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=17,
+        minute=30,
+        id="watchlist_earnings_scanner",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("📅 Watchlist Earnings Triage Scanner scheduled at 17:30 IST weekdays")
+
 
 
     scheduler.add_job(

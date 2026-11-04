@@ -62,7 +62,7 @@ attendance check-in and audio cleanup
 
 ### Telegram commands registered in `main.py`
 
-`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`.
+`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`, `/watchlist`, `/earnings`.
 
 ## Spec status and gaps
 

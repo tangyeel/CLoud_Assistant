@@ -47,6 +47,8 @@ from bot.handlers import (
     cmd_alerts,
     cmd_memory,
     cmd_forget,
+    cmd_watchlist,
+    cmd_earnings,
     handle_callback_query,
     handle_text_message,
     handle_voice_message,
@@ -112,6 +114,9 @@ def build_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("alerts", cmd_alerts))
     app.add_handler(CommandHandler("memory", cmd_memory))
     app.add_handler(CommandHandler("forget", cmd_forget))
+    app.add_handler(CommandHandler("watchlist", cmd_watchlist))
+    app.add_handler(CommandHandler("earnings", cmd_earnings))
+
 
 
 

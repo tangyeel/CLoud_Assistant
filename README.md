@@ -68,6 +68,7 @@
 │   └── speech.py          # Edge-TTS audio synthesis & chime prepending
 ├── utils/
 │   ├── attendance.py      # Thapar 75% attendance margin engine
+│   ├── earnings.py        # Autonomous earnings triage & custom watchlist
 │   ├── finance.py         # Market snapshot, stock detail & pre-market radar
 │   ├── health.py          # /health endpoint for 24/7 uptime pings
 │   ├── ipo.py             # Live IPO GMP scraper & Saturday report
