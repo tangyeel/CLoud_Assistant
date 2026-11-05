@@ -21,6 +21,7 @@ from config import (
     SEND_ERROR_ALERTS,
 )
 from utils.logger import logger
+from utils.alert_tracker import is_alert_dispatched, mark_alert_dispatched
 from tts.speech import cleanup_audio_files
 
 # Scheduler instance using configured timezone
@@ -87,13 +88,11 @@ async def _cleanup_job():
     cleanup_audio_files(max_age_hours=12)
 
 
-# Cache of alerted calendar items to avoid repeats during this process lifetime.
-_alerted_event_ids: set[str] = set()
-
-
 async def _check_upcoming_commitments():
     """
     Check for events starting in 10-18 minutes and send 15-minute Time-to-Leave alert.
+    Uses persistent alert tracker to guarantee exactly one alert across container restarts,
+    Render redeployments, and multi-account calendar syncing.
     """
     if not _bot_instance or not TELEGRAM_CHAT_ID:
         return
@@ -108,15 +107,20 @@ async def _check_upcoming_commitments():
         events = get_todays_events()
 
         for ev in events:
-            raw_event_id = ev.get("id")
-            if not raw_event_id:
-                continue
-            ev_id = f"{ev.get('account', 'default')}:{raw_event_id}"
-            if ev_id in _alerted_event_ids:
-                continue
-
+            raw_event_id = ev.get("id", "")
             start_raw = ev.get("start")
             if not start_raw or "T" not in str(start_raw):
+                continue
+
+            summary = ev.get("summary", "")
+            clean_summary = summary.replace(" [Thapar]", "").strip().lower()
+            start_time_key = str(start_raw)[:16]
+
+            key_id = f"cal_id:{raw_event_id}" if raw_event_id else ""
+            key_time = f"cal_time:{clean_summary}:{start_time_key}"
+
+            # Skip if this specific event occurrence was already alerted
+            if (key_id and is_alert_dispatched(key_id)) or is_alert_dispatched(key_time):
                 continue
 
             try:
@@ -128,7 +132,10 @@ async def _check_upcoming_commitments():
 
                 # Trigger when 10 to 18 minutes away
                 if 10.0 <= diff_min <= 18.0:
-                    _alerted_event_ids.add(ev_id)
+                    if key_id:
+                        mark_alert_dispatched(key_id, context=summary)
+                    mark_alert_dispatched(key_time, context=summary)
+
                     time_str = ev_dt.strftime("%I:%M %p")
                     loc = ev.get("location")
                     loc_str = f"📍 Location: {loc}\n" if loc else ""
@@ -178,9 +185,6 @@ async def _attendance_daily_poll():
         logger.warning(f"Daily attendance poll error: {e}")
 
 
-_sent_deadline_alerts: set[tuple[str, str, str, int]] = set()
-
-
 async def _check_deadlines():
     """Send each pending task/coursework alert once per configured lead time."""
     if not _bot_instance or not TELEGRAM_CHAT_ID:
@@ -225,10 +229,10 @@ async def _check_deadlines():
             lead_minutes = lead_hours * 60
             if not (lead_minutes - DEADLINE_ALERT_CHECK_MINUTES < minutes_left <= lead_minutes):
                 continue
-            key = (source, f"{course}:{item_id}", due.isoformat(), lead_hours)
-            if key in _sent_deadline_alerts:
+            key = f"deadline:{source}:{course}:{item_id}:{due.isoformat()[:16]}:{lead_hours}h"
+            if is_alert_dispatched(key):
                 continue
-            _sent_deadline_alerts.add(key)
+            mark_alert_dispatched(key, context=f"{title} ({lead_hours}h)")
             when = due.strftime("%a, %b %d at %I:%M %p")
             course_line = f"\n📚 Course: **{course}**" if course else ""
             try:
@@ -240,7 +244,6 @@ async def _check_deadlines():
                 )
                 logger.info(f"Sent {lead_hours}h {source} deadline alert for '{title}'.")
             except Exception as e:
-                _sent_deadline_alerts.discard(key)
                 logger.warning(f"Could not send deadline alert for '{title}': {e}")
 
 

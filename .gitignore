@@ -22,8 +22,9 @@ test_*.mp3
 test_*.ogg
 !audio/.gitkeep
 
-# Local user attendance data
+# Local user attendance & runtime state
 data/attendance.json
+data/alert_history.json
 !data/.gitkeep
 
 # Logs
