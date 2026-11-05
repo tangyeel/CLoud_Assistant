@@ -60,7 +60,8 @@ async def route_message(message: str, bot: Bot) -> str:
         reflect_and_memorize,
     )
 
-    # 1. Update Working Memory & Recall Relevant Semantic Memories
+    # 1. Retrieve Recent Conversation Context for Anaphora/Pronoun Resolution
+    recent_context = working_memory.get_context_string(max_turns=4)
     working_memory.add_turn("user", message)
     recalled_mems = recall_relevant_memories(message, top_k=3)
     recalled_context = format_memories_for_prompt(recalled_mems)
@@ -75,7 +76,9 @@ async def route_message(message: str, bot: Bot) -> str:
     params = {}
 
     try:
+        context_block = f"Recent conversation flow:\n{recent_context}\n\n" if recent_context else ""
         prompt = INTENT_PARSER_PROMPT.format(
+            context=context_block,
             message=message,
             today=today_str,
             current_time=current_time_str,
@@ -358,15 +361,26 @@ async def _handle_create_task(params: dict) -> str:
         or "New Task"
     )
     due_date = params.get("due_date") or params.get("date") or params.get("due")
+    due_time = params.get("due_time") or params.get("time") or params.get("start_time")
     notes = params.get("notes", "")
+
+    if due_time:
+        time_note = f"⏰ Reminder time: {due_time}"
+        notes = f"{time_note}\n{notes}".strip() if notes else time_note
 
     due_rfc = None
     if due_date:
-        due_rfc = f"{due_date}T23:59:59.000Z"
+        if due_time and ":" in str(due_time):
+            due_rfc = f"{due_date}T{due_time}:00.000Z"
+        else:
+            due_rfc = f"{due_date}T23:59:59.000Z"
 
     try:
         result = create_task(title=title, notes=notes, due_date=due_rfc)
-        due_info = f"\n📅 Due: `{due_date}`" if due_date else ""
+        due_info = ""
+        if due_date:
+            time_str = f" at {due_time}" if due_time else ""
+            due_info = f"\n📅 Scheduled: `{due_date}`{time_str}"
         return f"✅ **Task Saved to Google Tasks!**\n\n📝 **{result['title']}**{due_info}"
     except Exception as e:
         logger.error(f"Failed to create task: {e}")
@@ -459,9 +473,13 @@ def _handle_query_classroom() -> str:
 
 def _handle_complete_task(params: dict) -> str:
     """Mark a task complete by title keyword match."""
-    task_keyword = params.get("task_title", "").lower()
-    if not task_keyword:
-        return "❌ Please specify which task you'd like to complete."
+    task_keyword = params.get("task_title", "").strip().lower()
+    for prefix in ["complete ", "finish ", "mark ", "done with "]:
+        if task_keyword.startswith(prefix):
+            task_keyword = task_keyword[len(prefix):].strip()
+
+    if not task_keyword or task_keyword in ["it", "that", "this"]:
+        return "❌ Please specify which task you'd like to mark as complete."
 
     try:
         tasks = get_pending_tasks()

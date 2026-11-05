@@ -71,16 +71,17 @@ Do NOT include markdown code blocks (```json), explanations, or preamble. Just t
 Supported intents:
 - "schedule_event": User wants to create or schedule a calendar event.
   Parameters: "title" (str), "date" (YYYY-MM-DD), "start_time" (HH:MM in 24h), "end_time" (HH:MM in 24h, optional), "location" (str, optional), "attendees" (list of str emails, optional)
-- "create_task": User wants to add a task, reminder, or to-do item.
-  Parameters: "title" (str), "due_date" (YYYY-MM-DD, optional), "notes" (str, optional)
+- "create_task": User wants to add a task, reminder, to-do item, or follow-up (e.g. "remind me to complete X at 9pm", "remind me to do homework", "add buy milk to tasks").
+  CRITICAL: "Remind me to..." or "set a reminder to..." is ALWAYS "create_task", NEVER "complete_task"! They are scheduling a future task, not marking an existing one done!
+  Parameters: "title" (str - resolve pronouns like 'it', 'that', 'this' using conversation context), "due_date" (YYYY-MM-DD, optional), "due_time" (HH:MM in 24h, optional), "notes" (str, optional)
+- "complete_task": User explicitly states they have ALREADY finished, completed, done, or want to check off an ALREADY existing task right now (e.g. "I finished assignment 1", "mark task 2 as done", "check off groceries", "done with OS lab").
+  Parameters: "task_title" (str keyword to match)
 - "query_emails": User asks about emails or inbox.
   Parameters: "hours_back" (int, default 12)
 - "query_calendar": User asks about schedule or events.
   Parameters: "days_ahead" (int, default 1)
 - "query_tasks": User asks about pending tasks or to-do list.
 - "query_classroom": User asks about assignments, homework, or classroom deadlines.
-- "complete_task": User states they finished or want to complete a task.
-  Parameters: "task_title" (str keyword to match)
 - "query_weather": User asks about the weather, forecast, rain, or temperature.
   Parameters: "city" (str, optional)
 - "query_attendance": User asks about university attendance, safe bunks, or attendance percentage.
@@ -114,11 +115,15 @@ Supported intents:
   Parameters: "question" (str)
 - "unknown": Cannot categorize.
 
-Date/time resolution rules:
+RULES FOR PARSING:
+1. "Remind me to..." or "set a reminder to..." is ALWAYS "create_task", NEVER "complete_task".
+2. Pronoun & Context Resolution: Always replace pronouns like "it", "that", "this", "them" in task titles or parameters with the actual entity/assignment/stock mentioned in recent conversation flow.
+3. Date/time resolution rules:
 - Current date reference: {today} ({current_time})
-- Resolve "today", "tomorrow", "this Friday", "next Monday" to specific YYYY-MM-DD dates."""
+- Resolve "today", "tonight", "tomorrow", "this Friday", "next Monday" to specific YYYY-MM-DD dates.
+- Resolve "9pm", "at 9", "tonight at 9" to "21:00" in 24-hour format."""
 
-INTENT_PARSER_PROMPT = """User message:
+INTENT_PARSER_PROMPT = """{context}User message:
 "{message}"
 
 Today is {today}. Current time is {current_time}."""
