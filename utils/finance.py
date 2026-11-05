@@ -96,6 +96,18 @@ def _fetch_price(symbol: str) -> Optional[dict]:
                 prev = float(hist["Close"].iloc[-2])
 
         if price is None:
+            # Fallback to official NSE Bhavcopy delivery data
+            try:
+                from utils.stealth_delivery import get_stock_delivery_data
+                bhav = get_stock_delivery_data(symbol)
+                if bhav and bhav.get("close"):
+                    price = float(bhav["close"])
+                    change_pct = float(bhav.get("change_pct", 0.0))
+                    prev = round(price / (1.0 + change_pct / 100.0), 2) if change_pct != 0 else price
+            except Exception:
+                pass
+
+        if price is None:
             return None
 
         change = round(price - prev, 2) if prev else 0.0

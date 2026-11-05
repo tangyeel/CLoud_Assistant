@@ -104,11 +104,11 @@ def get_unread_emails(
 
 
 @retry_on_failure(max_retries=3, base_delay=1.5)
-def get_email_body(message_id: str) -> str:
+def get_email_body(message_id: str, account: str = "default") -> str:
     """
-    Fetch the decoded plain-text content of a specific email.
+    Fetch the decoded plain-text content of a specific email across accounts.
     """
-    service = build_service("gmail", "v1")
+    service = build_service("gmail", "v1", account=account)
     msg = service.users().messages().get(userId="me", id=message_id, format="full").execute()
     payload = msg.get("payload", {})
     return _extract_plain_text(payload)
@@ -130,14 +130,14 @@ def _extract_plain_text(payload: dict) -> str:
 
 
 @retry_on_failure(max_retries=3, base_delay=1.5)
-def mark_as_read(message_id: str) -> None:
+def mark_as_read(message_id: str, account: str = "default") -> None:
     """
-    Remove the UNREAD label from a message.
+    Remove the UNREAD label from a message across accounts.
     """
-    service = build_service("gmail", "v1")
+    service = build_service("gmail", "v1", account=account)
     service.users().messages().modify(
         userId="me",
         id=message_id,
         body={"removeLabelIds": ["UNREAD"]},
     ).execute()
-    logger.debug(f"Marked email {message_id} as read.")
+    logger.debug(f"Marked email {message_id} ({account}) as read.")

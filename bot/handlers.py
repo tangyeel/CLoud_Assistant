@@ -649,20 +649,58 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("❌ Scheduling request cancelled.")
 
     elif data == "att_all_today":
-        from utils.attendance import record_attendance, format_attendance_card
-        for subj in ["Operating Systems", "Data Structures And Algorithms", "Aptitude Skills Building"]:
+        from utils.attendance import record_attendance, format_attendance_card, _load_data
+        from google_services.calendar_service import get_todays_events
+
+        # Identify actual classes conducted today from Google Calendar
+        today_subjects = []
+        try:
+            events = get_todays_events()
+            for ev in events:
+                summary = ev.get("summary", "").replace(" [Thapar]", "").strip()
+                if summary and summary not in today_subjects:
+                    today_subjects.append(summary)
+        except Exception:
+            pass
+
+        # Fallback to existing recorded subjects if no calendar events found today
+        if not today_subjects:
+            data_dict = _load_data()
+            today_subjects = list(data_dict.get("subjects", {}).keys())
+
+        for subj in today_subjects:
             record_attendance(subj, "attended")
+
         card, markup = format_attendance_card()
-        await query.edit_message_text(f"🎉 **Recorded attendance for all lectures today!**\n\n{card}", reply_markup=markup, parse_mode="Markdown")
+        subj_list_str = ", ".join(today_subjects[:3])
+        await query.edit_message_text(f"🎉 **Recorded attendance for today's lectures ({subj_list_str})!**\n\n{card}", reply_markup=markup, parse_mode="Markdown")
 
     elif data == "att_menu_missed":
         from utils.attendance import get_attendance_stats
         stats = get_attendance_stats()
         buttons = []
-        for s_name in stats["subjects"].keys():
-            buttons.append([InlineKeyboardButton(f"❌ Missed: {s_name}", callback_data=f"att_miss_{s_name[:20]}")])
+        subject_names = list(stats["subjects"].keys())
+        for idx, s_name in enumerate(subject_names):
+            buttons.append([InlineKeyboardButton(f"❌ Missed: {s_name}", callback_data=f"att_miss_idx_{idx}")])
         buttons.append([InlineKeyboardButton("🔙 Back", callback_data="att_back")])
         await query.edit_message_text("Select which lecture was missed:", reply_markup=InlineKeyboardMarkup(buttons))
+
+    elif data.startswith("att_miss_idx_"):
+        idx_str = data.replace("att_miss_idx_", "")
+        from utils.attendance import get_attendance_stats, record_attendance, format_attendance_card
+        stats = get_attendance_stats()
+        subject_names = list(stats["subjects"].keys())
+        try:
+            target_idx = int(idx_str)
+            if 0 <= target_idx < len(subject_names):
+                s_name = subject_names[target_idx]
+                record_attendance(s_name, "missed")
+                card, markup = format_attendance_card()
+                await query.edit_message_text(f"Recorded missed lecture for **{s_name}**.\n\n{card}", reply_markup=markup, parse_mode="Markdown")
+            else:
+                await query.edit_message_text("❌ Invalid subject selection.")
+        except Exception as e:
+            await query.edit_message_text(f"❌ Error recording missed lecture: {e}")
 
     elif data.startswith("att_miss_"):
         s_name = data.replace("att_miss_", "")
