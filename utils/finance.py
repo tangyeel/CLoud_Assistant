@@ -340,24 +340,57 @@ def fuzzy_resolve_stock(query: str) -> tuple[Optional[str], Optional[str]]:
 def get_stock_details(ticker: str, company_name: str = "") -> str:
     """
     Fetch comprehensive stock info and return a formatted Telegram Markdown card.
+    Guaranteed crash-proof with fallback to official NSE Bhavcopy data.
     """
+    import re
     try:
         import yfinance as yf  # type: ignore
     except ImportError:
         return "❌ yfinance is not installed. Please add it to requirements.txt."
 
+    info = {}
+    t = None
     try:
         t = yf.Ticker(ticker)
         info = t.info or {}
     except Exception as e:
-        return f"❌ Could not fetch data for `{ticker}`: {e}"
+        logger.debug(f"yfinance info fetch exception for {ticker}: {e}")
 
-    name    = info.get("longName") or info.get("shortName") or company_name or ticker
-    price   = info.get("currentPrice") or info.get("regularMarketPrice")
-    prev    = info.get("previousClose") or info.get("regularMarketPreviousClose")
-    change  = round((price - prev), 2) if price and prev else 0
-    chg_pct = round((change / prev) * 100, 2) if prev else 0
-    arrow   = _arrow(change)
+    # Fallback to fast_info or history if info is empty/throttled
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    prev = info.get("previousClose") or info.get("regularMarketPreviousClose")
+    
+    if price is None and t is not None:
+        try:
+            fast_p = getattr(t.fast_info, "last_price", None)
+            fast_prev = getattr(t.fast_info, "previous_close", None)
+            if fast_p:
+                price = float(fast_p)
+            if fast_prev:
+                prev = float(fast_prev)
+        except Exception:
+            pass
+
+    # Secondary fallback to official NSE Bhavcopy data
+    bhav_data = None
+    try:
+        from utils.stealth_delivery import get_stock_delivery_data
+        bhav_data = get_stock_delivery_data(ticker)
+        if bhav_data:
+            if price is None and bhav_data.get("close"):
+                price = float(bhav_data["close"])
+            if not prev and bhav_data.get("change_pct") is not None and price:
+                pct = float(bhav_data["change_pct"])
+                prev = price / (1.0 + (pct / 100.0))
+    except Exception as e:
+        logger.debug(f"Bhavcopy fallback error: {e}")
+
+    name = info.get("longName") or info.get("shortName") or company_name or ticker
+    name = re.sub(r'[*_`\[\]]', '', str(name)).strip()
+
+    change = round((price - prev), 2) if price is not None and prev is not None else 0.0
+    chg_pct = round((change / prev) * 100, 2) if prev else 0.0
+    arrow = _arrow(change)
 
     high_52 = info.get("fiftyTwoWeekHigh")
     low_52  = info.get("fiftyTwoWeekLow")
@@ -370,72 +403,113 @@ def get_stock_details(ticker: str, company_name: str = "") -> str:
     volume  = info.get("volume") or info.get("regularMarketVolume")
     avg_vol = info.get("averageVolume")
 
+    # If volume missing, check bhav_data
+    if not volume and bhav_data:
+        volume = bhav_data.get("traded_qty")
+
     def _mktcap(v):
         if v is None:
             return "N/A"
-        if v >= 1e12:
-            return f"₹{v/1e12:.2f}T"
-        if v >= 1e9:
-            return f"₹{v/1e9:.2f}B"
-        if v >= 1e7:
-            return f"₹{v/1e7:.2f}Cr"
-        return f"₹{v:,.0f}"
+        try:
+            fv = float(v)
+            if fv >= 1e12:
+                return f"₹{fv/1e12:.2f}T"
+            if fv >= 1e9:
+                return f"₹{fv/1e9:.2f}B"
+            if fv >= 1e7:
+                return f"₹{fv/1e7:.2f}Cr"
+            return f"₹{fv:,.0f}"
+        except Exception:
+            return "N/A"
+
+    price_header = (
+        f"{arrow} *₹{price:,.2f}*  ({change:+.2f} / {chg_pct:+.2f}%)\n"
+        if price is not None
+        else "📊 *Price tracking pending active trading quote*\n"
+    )
+
+    pe_val = float(pe) if pe and isinstance(pe, (int, float)) else None
+    pb_val = float(pb) if pb and isinstance(pb, (int, float)) else None
+    pe_str = f"  P/E: `{pe_val:.2f}`" if pe_val else "  P/E: `N/A`"
+    if pb_val:
+        pe_str += f"  |  P/B: `{pb_val:.2f}`"
+
+    eps_val = float(eps) if eps and isinstance(eps, (int, float)) else None
+    div_val = float(div_yld) if div_yld and isinstance(div_yld, (int, float)) else None
+    vol_val = int(volume) if volume and isinstance(volume, (int, float)) else None
+    avg_val = int(avg_vol) if avg_vol and isinstance(avg_vol, (int, float)) else None
 
     lines = [
         f"📈 *{name}* (`{ticker}`)",
-        f"{arrow} *₹{price:,.2f}*  ({change:+.2f} / {chg_pct:+.2f}%)\n",
+        price_header,
         f"📊 *Key Stats*",
         f"  52W High: `{_fmt_num(high_52) if high_52 else 'N/A'}`  |  52W Low: `{_fmt_num(low_52) if low_52 else 'N/A'}`",
         f"  Market Cap: `{_mktcap(mkt_cap)}`" + (f"  |  Sector: `{sector}`" if sector else ""),
-        f"  P/E: `{pe:.2f}`" + (f"  |  P/B: `{pb:.2f}`" if pb else "") if pe else "  P/E: `N/A`",
-        f"  EPS: `{eps:.2f}`" if eps else "",
-        f"  Dividend Yield: `{div_yld * 100:.2f}%`" if div_yld else "",
-        f"  Volume: `{volume:,}`  Avg: `{avg_vol:,}`" if volume and avg_vol else "",
+        pe_str,
     ]
+    if eps_val:
+        lines.append(f"  EPS: `{eps_val:.2f}`")
+    if div_val:
+        lines.append(f"  Dividend Yield: `{div_val * 100:.2f}%`")
+    if vol_val:
+        lines.append(f"  Volume: `{vol_val:,}`" + (f"  Avg: `{avg_val:,}`" if avg_val else ""))
+
+    # Institutional delivery metric if available
+    if bhav_data:
+        lines.append(f"  Delivery: `{bhav_data['delivery_pct']}%` (`₹{bhav_data['turnover_cr']} Cr` traded)")
 
     # Earnings / Results date
     try:
-        cal = t.calendar
-        if isinstance(cal, dict):
-            earnings_dates = cal.get("Earnings Date")
-            if earnings_dates:
-                if hasattr(earnings_dates, "__iter__") and not isinstance(earnings_dates, str):
-                    ed = list(earnings_dates)[0]
-                else:
-                    ed = earnings_dates
-                lines.append(f"\n📅 *Next Results/Earnings*: `{ed}`")
+        if t is not None:
+            cal = t.calendar
+            if isinstance(cal, dict):
+                earnings_dates = cal.get("Earnings Date")
+                if earnings_dates:
+                    if hasattr(earnings_dates, "__iter__") and not isinstance(earnings_dates, str):
+                        ed = list(earnings_dates)[0]
+                    else:
+                        ed = earnings_dates
+                    lines.append(f"\n📅 *Next Results/Earnings*: `{ed}`")
     except Exception:
         pass
 
-    # Recent news (up to 3 headlines)
+    # Recent news (safely unpack legacy & modern yfinance structures)
     try:
-        news_items = t.news or []
+        news_items = (t.news if t is not None else []) or []
         if news_items:
-            lines.append("\n📰 *Recent News*")
-            for item in news_items[:3]:
-                headline = item.get("title", "")
-                url = item.get("link") or item.get("url") or ""
-                pub = item.get("publisher", "")
+            valid_news = []
+            for item in news_items:
+                headline = item.get("title") or (item.get("content") or {}).get("title") or ""
+                url = (
+                    item.get("link")
+                    or item.get("url")
+                    or ((item.get("content") or {}).get("canonicalUrl") or {}).get("url")
+                    or ((item.get("content") or {}).get("clickThroughUrl") or {}).get("url")
+                    or ""
+                )
+                pub = (
+                    item.get("publisher")
+                    or ((item.get("content") or {}).get("provider") or {}).get("displayName")
+                    or ""
+                )
                 if headline:
+                    clean_hl = re.sub(r'[*_`\[\]()]', '', headline).strip()[:70]
+                    clean_pub = re.sub(r'[*_`\[\]()]', '', pub).strip()
+                    pub_str = f" _({clean_pub})_" if clean_pub else ""
                     if url:
-                        lines.append(f"  • [{headline[:70]}]({url})  _({pub})_")
+                        valid_news.append(f"  • [{clean_hl}]({url}){pub_str}")
                     else:
-                        lines.append(f"  • {headline[:70]}  _({pub})_")
+                        valid_news.append(f"  • {clean_hl}{pub_str}")
+                if len(valid_news) >= 3:
+                    break
+
+            if valid_news:
+                lines.append("\n📰 *Recent News*")
+                lines.extend(valid_news)
     except Exception as e:
         logger.debug(f"News fetch error for {ticker}: {e}")
-        # Fallback: ddgs news
-        try:
-            from ddgs import DDGS
-            with DDGS() as d:
-                results = list(d.news(f"{name} stock NSE BSE", max_results=3))
-            if results:
-                lines.append("\n📰 *Recent News*")
-                for r in results:
-                    lines.append(f"  • [{r['title'][:70]}]({r['url']})")
-        except Exception:
-            pass
 
-    lines.append(f"\n_Data via Yahoo Finance · {_now_ist()}_")
+    lines.append(f"\n_Data via Yahoo Finance & NSE Bhavcopy · {_now_ist()}_")
     return "\n".join(l for l in lines if l)
 
 
@@ -455,12 +529,16 @@ def build_analyst_context(ticker: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    if price is None and t is not None:
+        price = getattr(t.fast_info, "last_price", None)
+
     return {
         "name": info.get("longName") or info.get("shortName") or ticker,
         "ticker": ticker,
         "sector": info.get("sector"),
         "industry": info.get("industry"),
-        "price": info.get("currentPrice"),
+        "price": price,
         "52w_high": info.get("fiftyTwoWeekHigh"),
         "52w_low": info.get("fiftyTwoWeekLow"),
         "mkt_cap": info.get("marketCap"),

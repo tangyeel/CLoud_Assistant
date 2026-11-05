@@ -71,7 +71,33 @@ async def route_message(message: str, bot: Bot) -> str:
     today_str = now.strftime("%Y-%m-%d")
     current_time_str = now.strftime("%H:%M")
 
-    # 2. Parse intent using AI
+    # 2. Fast Deterministic Financial Command Pre-Router (Zero Latency & 100% Reliable)
+    clean_msg = message.strip()
+    clean_lower = clean_msg.lower()
+
+    # Direct Stock Analysis (e.g. "analyze hal", "analyse reliance", "breakdown of tcs")
+    for prefix in ["analyze ", "analyse ", "analysis of ", "breakdown of ", "fundamental analysis of ", "deep dive on "]:
+        if clean_lower.startswith(prefix):
+            target = clean_msg[len(prefix):].strip()
+            from utils.finance import fuzzy_resolve_stock
+            name, ticker = fuzzy_resolve_stock(target)
+            if ticker:
+                reply = await _handle_analyze_stock({"company": target}, message)
+                working_memory.add_turn("assistant", reply)
+                return reply
+
+    # Direct Stock Quote (e.g. "stock hal", "price of hal", "quote for reliance")
+    for prefix in ["stock ", "price of ", "quote for ", "quote of ", "share price of "]:
+        if clean_lower.startswith(prefix):
+            target = clean_msg[len(prefix):].strip()
+            from utils.finance import fuzzy_resolve_stock, get_stock_details
+            name, ticker = fuzzy_resolve_stock(target)
+            if ticker:
+                reply = get_stock_details(ticker, company_name=name or "")
+                working_memory.add_turn("assistant", reply)
+                return reply
+
+    # 3. Parse intent using AI
     intent = "unknown"
     params = {}
 

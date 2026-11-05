@@ -88,8 +88,10 @@ Supported intents:
 - "query_news": User asks for tech, finance, market, or business news.
 - "query_market": User asks for market status, market snapshot, index performance (Nifty, Sensex, Bank Nifty, global indices, commodities, forex).
 - "query_stock": User asks about a specific stock, share price, quote, upcoming earnings/results date, or recent company news.
+  CRITICAL: Short Indian tickers like HAL (Hindustan Aeronautics), BEL (Bharat Electronics), ITC, TCS, INFY, SBI, LT, M&M, GAIL, ONGC are STOCKS, not fictional characters, AI systems, or common English words!
   Parameters: "company" (str)
-- "analyze_stock": User asks for a fundamental breakdown, in-depth financial analysis, moat, valuation, or investment thesis on a company.
+- "analyze_stock": User asks for a fundamental breakdown, in-depth financial analysis, moat, valuation, or investment thesis on a company (e.g. "analyze hal", "analyze reliance", "breakdown of tcs").
+  CRITICAL: If the user asks to analyze HAL, BEL, ITC, or any company/stock, this is ALWAYS "analyze_stock"!
   Parameters: "company" (str)
 - "query_ipo": User asks about upcoming IPOs, grey market premium (GMP), listing gains, or subscription status.
 - "manage_thesis": User wants to log, view, or close an investment thesis.

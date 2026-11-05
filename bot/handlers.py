@@ -290,26 +290,33 @@ async def cmd_market(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 @authorized_only
 async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /stock <name> — typo-tolerant stock overview, news, and earnings."""
-    query = " ".join(context.args) if context.args else ""
+    """Handle /stock [name] — typo-tolerant stock overview, news, and earnings."""
+    query = " ".join(context.args).strip() if context.args else ""
     if not query:
-        await update.effective_message.reply_text(
-            "Please provide a stock name or ticker, e.g. `/stock Reliance` or `/stock infy`",
-            parse_mode="Markdown",
+        msg = (
+            "📈 **Stock Intelligence Terminal**\n\n"
+            "Please specify a stock ticker or company name.\n"
+            "• Examples: `/stock HAL`, `/stock Reliance`, `/stock TCS`\n\n"
+            "💡 _Tip: You can also ask in plain English: 'price of hal', 'analyze hal', or 'stealth delivery for reliance'._"
         )
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
         return
 
     from utils.finance import fuzzy_resolve_stock, get_stock_details
     name, ticker = fuzzy_resolve_stock(query)
     if not ticker:
         await update.effective_message.reply_text(
-            f"❌ Could not resolve *'{query}'* to an active stock. Try the full company name (e.g. `/stock Tata Motors`).",
+            f"❌ Could not resolve *'{query}'* to an active stock. Try the full company name (e.g. `/stock HAL` or `/stock Reliance`).",
             parse_mode="Markdown",
         )
         return
 
     card = get_stock_details(ticker, company_name=name or "")
-    await update.effective_message.reply_text(card, parse_mode="Markdown")
+    try:
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+    except Exception as md_err:
+        logger.warning(f"Markdown send error for {ticker}: {md_err}, falling back to plain text...")
+        await update.effective_message.reply_text(card)
 
 
 @authorized_only
