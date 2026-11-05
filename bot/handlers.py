@@ -44,87 +44,166 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
+def get_help_master_menu():
+    """Build the master command navigation card with interactive buttons."""
+    text = (
+        "🤖 **J.A.R.V.I.S. Command & Intelligence Center**\n\n"
+        "Welcome, sir. I am equipped with **20+ autonomous tools** covering Indian & global financial markets, "
+        "university academic safeguards, cognitive vector memory, and ambient voice briefings.\n\n"
+        "Select a category below for focused syntax & real-world examples, or tap **Full Guide**."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📈 Markets & Trading", callback_data="help_market"),
+            InlineKeyboardButton("🎓 University & Schedule", callback_data="help_academic"),
+        ],
+        [
+            InlineKeyboardButton("🧠 Memory & AI Analyst", callback_data="help_memory"),
+            InlineKeyboardButton("🎙️ Voice & Briefings", callback_data="help_voice"),
+        ],
+        [
+            InlineKeyboardButton("📖 Full Command Guide (All 20+)", callback_data="help_all"),
+        ]
+    ])
+    return text, keyboard
+
+
+def get_help_section(section: str):
+    """Return specific help section text and back-navigation markup."""
+    back_button = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Help Menu", callback_data="help_menu")]])
+
+    if section == "help_market":
+        text = (
+            "📈 **MARKET & FINANCIAL INTELLIGENCE**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "• `/market`\n"
+            "  ↳ *Description:* Instant snapshot of Indian indices (Nifty 50, Sensex, VIX, Bank Nifty, Midcap, Smallcap), Global benchmarks (S&P 500, Nasdaq, Dow, FTSE, Nikkei), Gold, Crude & USD/INR.\n"
+            "  ↳ *Usage:* `/market`\n\n"
+            "• `/stock <name or symbol>`\n"
+            "  ↳ *Description:* Live quote, 52W range, valuation ratios (P/E, P/B, EPS, Market Cap), upcoming earnings report date & recent news. Typo-tolerant (e.g. 'relince' resolves to Reliance).\n"
+            "  ↳ *Usage:* `/stock Reliance` or `/stock infy` or `/stock tata moters`\n\n"
+            "• `/watchlist [add | remove]`\n"
+            "  ↳ *Description:* Manage your custom earnings watchlist. Only tracks quarterly results and sends autonomous alerts for stocks on this list.\n"
+            "  ↳ *Usage:*\n"
+            "    - View watchlist & countdowns: `/watchlist`\n"
+            "    - Add multiple stocks: `/watchlist add Reliance, Infosys, Tata Motors`\n"
+            "    - Remove stock: `/watchlist remove TCS`\n\n"
+            "• `/earnings [stock]`\n"
+            "  ↳ *Description:* Autonomous quarterly earnings triage. Evaluates Revenue, Operating Margin, Net Profit, and Consensus Beat/Miss %. Cross-checks against active investment theses.\n"
+            "  ↳ *Usage:* `/earnings Infosys` or `/earnings` (triages all watchlist stocks)\n\n"
+            "• `/ipo`\n"
+            "  ↳ *Description:* Upcoming and open IPOs with issue price band, Grey Market Premium (GMP ₹ and % est. gain), subscription multiplier, and dates.\n"
+            "  ↳ *Usage:* `/ipo` *(also auto-sent every Saturday at 08:00 AM)*\n\n"
+            "• `/thesis [new | close]`\n"
+            "  ↳ *Description:* Track high-conviction investment theses with entry price, targets, stop-losses, and rationale. Background checks alert when target or stoploss is breached.\n"
+            "  ↳ *Usage:*\n"
+            "    - View portfolio: `/thesis`\n"
+            "    - Log new: `/thesis new INFY 1850 2100 1750 Cloud margin acceleration`\n"
+            "    - Close: `/thesis close INFY`\n\n"
+            "• `/alerts [cancel]`\n"
+            "  ↳ *Description:* Persistent price target and percentage volatility alerts evaluated every 5 minutes.\n"
+            "  ↳ *Usage:*\n"
+            "    - View active: `/alerts`\n"
+            "    - Cancel: `/alerts cancel alt_123` or `/alerts cancel Reliance`\n"
+            "    - Set in plain English: *'Alert me when Infosys hits 1900'* or *'Alert if Nifty drops 2%'*"
+        )
+        return text, back_button
+
+    elif section == "help_academic":
+        text = (
+            "🎓 **ACADEMIC & SCHEDULE SAFEGUARDS**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "• `/attendance`\n"
+            "  ↳ *Description:* Thapar University 75% attendance safeguard. Tracks attended vs missed lectures, calculates safe bunks remaining, and prompts for check-ins.\n"
+            "  ↳ *Usage:* `/attendance`\n\n"
+            "• `/classes`\n"
+            "  ↳ *Description:* Scans Google Classroom across Personal & Thapar accounts. Only displays actionable, unsubmitted assignments with future due dates.\n"
+            "  ↳ *Usage:* `/classes`\n\n"
+            "• `/schedule`\n"
+            "  ↳ *Description:* Agenda preview for today's commitments and university classes.\n"
+            "  ↳ *Usage:* `/schedule`\n\n"
+            "• `/tasks`\n"
+            "  ↳ *Description:* Interactive Google Tasks list with one-tap [Done] and [Snooze 24h] action buttons.\n"
+            "  ↳ *Usage:* `/tasks`\n\n"
+            "• `/emails`\n"
+            "  ↳ *Description:* Summarizes unread priority emails from the last 12 hours across Personal & Thapar inboxes.\n"
+            "  ↳ *Usage:* `/emails`\n\n"
+            "• *Exam Timetable OCR Vision:*\n"
+            "  ↳ Send any photo of a printed or digital exam schedule. J.A.R.V.I.S. reads it with Vision AI and adds all exam dates to Google Calendar with one click."
+        )
+        return text, back_button
+
+    elif section == "help_memory":
+        text = (
+            "🧠 **COGNITIVE MEMORY & REASONING**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "• `/memory`\n"
+            "  ↳ *Description:* View the persistent personal facts, portfolio guidelines, and preferences learned autonomously by the 4-layer vector memory.\n"
+            "  ↳ *Usage:* `/memory`\n\n"
+            "• `/forget <topic or id>`\n"
+            "  ↳ *Description:* Purge a specific learned preference, outdated habit, or memory ID from the Upstash Vector cloud store.\n"
+            "  ↳ *Usage:* `/forget Tata Motors` or `/forget risk tolerance`\n\n"
+            "• *Natural Language Stock Analysis:*\n"
+            "  ↳ Tell Jarvis: *'Analyze ITC'* or *'Fundamental breakdown of HDFC Bank'*. Synthesizes a 4-pillar institutional breakdown (Moat, Financial Health, Valuation, Risks)."
+        )
+        return text, back_button
+
+    elif section == "help_voice":
+        text = (
+            "🎙️ **VOICE, DAILY BRIEFINGS & TOOLS**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "• `/morning` — Trigger on-demand Jarvis British voice morning briefing (weather, schedule, priority emails, tasks, open assignments).\n"
+            "• `/evening` — Forward-looking evening debrief focusing on tomorrow's earliest commitment, weather, and open deadlines.\n"
+            "• `/weather` — Real-time weather and precipitation chance for Patiala.\n"
+            "• `/news` — Live market, tech, and financial news headlines.\n"
+            "• `/search <query>` — Real-time DuckDuckGo web search with cited sources.\n"
+            "• `/status` — Diagnostic report (Google OAuth health, AI cascade order, Edge-TTS status, Upstash Vector connection).\n\n"
+            "🎙️ *Two-Way Voice Support:*\n"
+            "Send any Telegram voice note anytime. J.A.R.V.I.S. transcribes via Groq Whisper, executes your request, and responds with British voice audio!"
+        )
+        return text, back_button
+
+    else:
+        # Full guide
+        all_text = (
+            "📖 **J.A.R.V.I.S. Full Command Reference**\n\n"
+            "📈 **MARKETS:**\n"
+            "• `/market` — Real-time Indian & global index snapshot\n"
+            "• `/stock <name>` — Quote, ratios, earnings date & news (typo-tolerant)\n"
+            "• `/watchlist [add|remove]` — Custom earnings watchlist\n"
+            "• `/earnings [stock]` — Autonomous quarterly financial results triage\n"
+            "• `/ipo` — Live IPO GMP radar & subscription status\n"
+            "• `/thesis [new|close]` — Investment thesis portfolio with target/SL tracking\n"
+            "• `/alerts [cancel]` — 5-minute price target & movement alerts\n\n"
+            "🎓 **ACADEMIC & SCHEDULE:**\n"
+            "• `/attendance` — Thapar 75% attendance safeguard & safe bunks\n"
+            "• `/classes` — Google Classroom unsubmitted assignments with future due dates\n"
+            "• `/schedule` — Today's agenda & calendar commitments\n"
+            "• `/tasks` — Interactive to-do list with [Done] and [Snooze] buttons\n"
+            "• `/emails` — Unread priority emails across Personal & Thapar\n"
+            "• *Photo OCR:* Upload exam schedule photos to sync with Google Calendar\n\n"
+            "🧠 **MEMORY & AI:**\n"
+            "• `/memory` — Inspect learned facts in Upstash Vector cloud\n"
+            "• `/forget <topic>` — Erase a fact or outdated preference\n"
+            "• *Natural Language:* Ask *'Analyze <stock>'* for 4-pillar fundamental report\n\n"
+            "🎙️ **VOICE & UTILITIES:**\n"
+            "• `/morning` — Morning British voice briefing\n"
+            "• `/evening` — Evening preparatory debrief\n"
+            "• `/weather` — Real-time Patiala forecast\n"
+            "• `/news` — Top tech & finance news\n"
+            "• `/search <q>` — Live web search\n"
+            "• `/status` — System health & AI provider diagnostics\n\n"
+            "🎙️ *Send voice notes anytime for spoken audio responses!*"
+        )
+        return all_text, back_button
+
+
 @authorized_only
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command with complete descriptions and usage examples."""
-    help_text = (
-        "🤖 **J.A.R.V.I.S. Command & Intelligence Reference**\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "📈 **MARKET & FINANCIAL INTELLIGENCE**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "• `/market`\n"
-        "  ↳ *Description:* Real-time snapshot of Indian indices (Nifty 50, Sensex, VIX, Bank Nifty, Midcap, Smallcap) + Global benchmarks (S&P 500, Nasdaq, Dow, FTSE, Nikkei) + Gold, Crude & USD/INR.\n"
-        "  ↳ *Usage:* `/market`\n\n"
-        "• `/stock <name or symbol>`\n"
-        "  ↳ *Description:* Quote, 52W range, valuation ratios (P/E, P/B, EPS, Market Cap), upcoming earnings report date & recent news. Typo-tolerant (e.g. 'relince' resolves to Reliance).\n"
-        "  ↳ *Usage:* `/stock Reliance` or `/stock infy` or `/stock tata moters`\n\n"
-        "• `/ipo`\n"
-        "  ↳ *Description:* Live upcoming and open IPOs with issue price band, Grey Market Premium (GMP ₹ and % est. gain), subscription multiplier, and close/listing dates.\n"
-        "  ↳ *Usage:* `/ipo` *(also auto-sent every Saturday at 08:00 AM)*\n\n"
-        "• `/thesis [new | close]`\n"
-        "  ↳ *Description:* Track high-conviction investment theses with entry price, targets, stop-losses, and rationale. Background checks alert you if target or stoploss is breached.\n"
-        "  ↳ *Usage:* \n"
-        "    - View portfolio: `/thesis`\n"
-        "    - Log new: `/thesis new INFY 1850 2100 1750 Cloud growth`\n"
-        "    - Close position: `/thesis close INFY`\n\n"
-        "• `/alerts [cancel]`\n"
-        "  ↳ *Description:* Persistent price target and percentage volatility alerts evaluated every 5 minutes.\n"
-        "  ↳ *Usage:*\n"
-        "    - View active: `/alerts`\n"
-        "    - Cancel: `/alerts cancel alt_123` or `/alerts cancel Reliance`\n"
-        "    - Set in plain English: *'Alert me when Infosys hits 1900'* or *'Alert if Nifty drops 2%'*\n\n"
-        "• `/watchlist [add | remove]`\n"
-        "  ↳ *Description:* Manage your custom earnings watchlist. Only tracks quarterly results and sends autonomous alerts for stocks on this list.\n"
-        "  ↳ *Usage:*\n"
-        "    - View watchlist & earnings countdown: `/watchlist`\n"
-        "    - Add stocks: `/watchlist add Reliance, Infosys, Tata Motors`\n"
-        "    - Remove stock: `/watchlist remove TCS`\n\n"
-        "• `/earnings [stock]`\n"
-        "  ↳ *Description:* Autonomous quarterly earnings triage. Evaluates Revenue, Operating Margin, Net Profit, and Consensus Beat/Miss percentage. Cross-checks against your active investment theses.\n"
-        "  ↳ *Usage:* `/earnings Infosys` or `/earnings` (triages all watchlist stocks)\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🧠 **COGNITIVE MEMORY & REASONING**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "• `/memory`\n"
-        "  ↳ *Description:* View the persistent personal facts, portfolio guidelines, and preferences learned autonomously by the 4-layer vector memory.\n"
-        "  ↳ *Usage:* `/memory`\n\n"
-        "• `/forget <topic or id>`\n"
-        "  ↳ *Description:* Purge a specific learned preference, outdated habit, or memory ID from the Upstash Vector cloud store.\n"
-        "  ↳ *Usage:* `/forget Tata Motors` or `/forget risk tolerance`\n\n"
-        "• *Natural Language Analysis:*\n"
-        "  ↳ Ask: *'Analyze ITC'* or *'Fundamental breakdown of HDFC Bank'* for 4-pillar institutional analysis (Moat, Health, Valuation, Risks).\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🎓 **ACADEMIC & SCHEDULE SAFEGUARDS**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "• `/attendance`\n"
-        "  ↳ *Description:* Thapar University 75% attendance safeguard. Tracks attended vs missed lectures, calculates safe bunks remaining, and prompts for check-ins.\n"
-        "  ↳ *Usage:* `/attendance`\n\n"
-        "• `/classes`\n"
-        "  ↳ *Description:* Scans Google Classroom across Personal & Thapar accounts. Only displays actionable, unsubmitted assignments with future due dates.\n"
-        "  ↳ *Usage:* `/classes`\n\n"
-        "• `/schedule`\n"
-        "  ↳ *Description:* Agenda preview for today's commitments and university classes.\n"
-        "  ↳ *Usage:* `/schedule`\n\n"
-        "• `/tasks`\n"
-        "  ↳ *Description:* Interactive Google Tasks list with one-tap [Done] and [Snooze 24h] action buttons.\n"
-        "  ↳ *Usage:* `/tasks`\n\n"
-        "• `/emails`\n"
-        "  ↳ *Description:* Summarizes unread priority emails from the last 12 hours across Personal & Thapar inboxes.\n"
-        "  ↳ *Usage:* `/emails`\n\n"
-        "• *Exam Timetable OCR:*\n"
-        "  ↳ *Usage:* Send any photo of a printed or screen exam schedule. J.A.R.V.I.S. reads it with vision AI and adds all exam dates to Google Calendar with one click.\n\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "🎙️ **VOICE & SYSTEM UTILITIES**\n"
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        "• `/morning` — Trigger on-demand Jarvis British voice morning briefing (weather, calendar, unread priority emails, tasks, open assignments).\n"
-        "• `/evening` — Trigger forward-looking evening debrief focusing on tomorrow's earliest commitment, weather, and open deadlines.\n"
-        "• `/weather` — Real-time weather and precipitation chance for Patiala.\n"
-        "• `/news` — Live market, tech, and financial news headlines.\n"
-        "• `/search <query>` — Real-time DuckDuckGo web search with sources.\n"
-        "• `/status` — Diagnostic report (Google OAuth token health, AI cascade order, Edge-TTS status, Upstash Vector connection).\n\n"
-        "🎙️ *Hands-Free Voice:* Send any Telegram voice note anytime. J.A.R.V.I.S. transcribes via Groq Whisper, executes your request, and responds with British voice audio!"
-    )
-    await update.effective_message.reply_text(help_text, parse_mode="Markdown")
+    """Handle /help command with interactive category navigation."""
+    text, markup = get_help_master_menu()
+    await update.effective_message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
+
 
 
 def get_tasks_with_buttons():
@@ -429,6 +508,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if failed:
             result += "\nCould not add: " + ", ".join(failed)
         await query.edit_message_text(result)
+
+    elif data.startswith("help_"):
+        if data == "help_menu":
+            text, markup = get_help_master_menu()
+            await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+        else:
+            text, markup = get_help_section(data)
+            await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data == "btn_agenda":
         resp = await _handle_query_calendar({"days_ahead": 1})
