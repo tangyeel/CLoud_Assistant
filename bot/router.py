@@ -118,6 +118,17 @@ async def route_message(message: str, bot: Bot) -> str:
         intent = "general_question"
         params = {"question": message}
 
+    # Deterministic Reminder Guardrail: "remind me to..." is ALWAYS a task or calendar event, NEVER complete_task
+    if clean_lower.startswith(("remind me to ", "remind me ", "set a reminder ", "set reminder ", "reminder to ", "alert me to ")):
+        if intent in ("complete_task", "unknown", "general_question"):
+            logger.info("Deterministic guardrail: overriding misclassified reminder to 'create_task'.")
+            intent = "create_task"
+            if not params.get("title") or params.get("title") in ("it", "that", "this"):
+                for pfx in ["remind me to ", "remind me ", "set a reminder to ", "set a reminder ", "reminder to "]:
+                    if clean_lower.startswith(pfx):
+                        params["title"] = clean_msg[len(pfx):].strip()
+                        break
+
     reply = ""
 
     # 3. Dispatch to specific handlers
@@ -378,6 +389,7 @@ async def _handle_schedule_event(params: dict) -> str:
 
 async def _handle_create_task(params: dict) -> str:
     """Create a task or reminder."""
+    import re
     title = (
         params.get("title")
         or params.get("task")
@@ -389,6 +401,22 @@ async def _handle_create_task(params: dict) -> str:
     due_date = params.get("due_date") or params.get("date") or params.get("due")
     due_time = params.get("due_time") or params.get("time") or params.get("start_time")
     notes = params.get("notes", "")
+
+    # Anaphora / Pronoun Resolution using Working Memory
+    lower_title = title.lower().strip()
+    if lower_title in ("it", "that", "this", "complete it", "finish it", "do it", "submit it") or lower_title.endswith(" it"):
+        from utils.memory import working_memory
+        history = working_memory.get_context_string(max_turns=4)
+        if history:
+            # Look for entities enclosed in markdown bold **Entity** or assignment names in prior assistant messages
+            candidates = re.findall(r"\*\*([^*]+)\*\*", history)
+            # Filter out non-task entities like numbers or system labels
+            valid_candidates = [c for c in candidates if len(c) > 3 and not c.startswith(("http", "Jarvis", "http", "Upcoming"))]
+            if valid_candidates:
+                resolved_item = valid_candidates[-1].strip()
+                action_pfx = "Complete " if ("complete" in lower_title or "finish" in lower_title) else "Work on "
+                title = f"{action_pfx}{resolved_item}"
+                logger.info(f"Resolved pronoun '{lower_title}' to '{title}' from working memory.")
 
     if due_time:
         time_note = f"⏰ Reminder time: {due_time}"

@@ -260,16 +260,26 @@ async def _check_deadlines():
             mark_alert_dispatched(key, context=f"{title} ({lead_hours}h)")
             when = due.strftime("%a, %b %d at %I:%M %p")
             course_line = f"\n📚 Course: **{course}**" if course else ""
+            alert_text = (
+                f"⏳ Deadline in about {lead_hours}h\n\n"
+                f"{'📝' if source == 'Task' else '🎓'} {title}{course_line}\n"
+                f"📅 Due: {when}"
+            )
             try:
                 await _bot_instance.send_message(
                     chat_id=TELEGRAM_CHAT_ID,
-                    text=(f"⏳ Deadline in about {lead_hours}h\n\n"
-                          f"{'📝' if source == 'Task' else '🎓'} {title}{course_line}\n"
-                          f"📅 Due: {when}"),
+                    text=alert_text,
+                    parse_mode="Markdown",
                 )
                 logger.info(f"Sent {lead_hours}h {source} deadline alert for '{title}'.")
-            except Exception as e:
-                logger.warning(f"Could not send deadline alert for '{title}': {e}")
+            except Exception:
+                try:
+                    await _bot_instance.send_message(
+                        chat_id=TELEGRAM_CHAT_ID,
+                        text=alert_text,
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not send deadline alert for '{title}': {e}")
 
 
 async def _premarket_radar_job():

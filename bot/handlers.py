@@ -587,17 +587,16 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         from google_services.calendar_service import create_event
-        # Calculate start and end at suggested time
+        # Calculate start and end at suggested time using timedelta to avoid invalid hour 24:00
         date = info["date"]
         sug_time = info["suggested"]
-        # parse e.g. '02:00 PM' to '14:00'
         try:
-            dt = datetime.strptime(sug_time, "%I:%M %p")
-            sug_24 = dt.strftime("%H:%M")
+            dt_start = datetime.strptime(f"{date} {sug_time}", "%Y-%m-%d %I:%M %p")
         except Exception:
-            sug_24 = "14:00"
-        st = f"{date}T{sug_24}:00"
-        et = f"{date}T{int(sug_24[:2])+1:02d}:{sug_24[3:]}:00"
+            dt_start = datetime.strptime(f"{date} 14:00", "%Y-%m-%d %H:%M")
+        dt_end = dt_start + timedelta(hours=1)
+        st = dt_start.strftime("%Y-%m-%dT%H:%M:%S")
+        et = dt_end.strftime("%Y-%m-%dT%H:%M:%S")
 
         try:
             result = create_event(
@@ -835,7 +834,11 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
             chunks = _split_message(reply_text)
             for i, chunk in enumerate(chunks):
                 m = markup if i == len(chunks) - 1 else None
-                await update.effective_message.reply_text(chunk, reply_markup=m, parse_mode="Markdown")
+                try:
+                    await update.effective_message.reply_text(chunk, reply_markup=m, parse_mode="Markdown")
+                except Exception as md_err:
+                    logger.warning(f"Markdown parse error: {md_err}. Falling back to plain text.")
+                    await update.effective_message.reply_text(chunk, reply_markup=m)
     except Exception as e:
         logger.error(f"Error handling message: {e}", exc_info=True)
         await update.effective_message.reply_text(f"❌ An error occurred processing your request: {e}")
