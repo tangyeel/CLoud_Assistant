@@ -75,8 +75,59 @@ async def route_message(message: str, bot: Bot) -> str:
     clean_msg = message.strip()
     clean_lower = clean_msg.lower()
 
+    # One-Tap Command Dock Buttons
+    if clean_lower in ("📊 market snapshot", "market snapshot"):
+        from utils.finance import get_market_snapshot
+        reply = get_market_snapshot()
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    if clean_lower in ("🎓 today's schedule", "today's schedule"):
+        reply = await _handle_query_calendar({"days_ahead": 1})
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    if clean_lower in ("📝 tasks", "pending tasks"):
+        from bot.handlers import get_tasks_with_buttons
+        reply = get_tasks_with_buttons()
+        return reply
+
+    if clean_lower in ("💼 theses & portfolio", "theses & portfolio", "theses"):
+        from utils.thesis import format_theses_card
+        reply = format_theses_card()
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    if clean_lower in ("🧠 memory", "jarvis memory"):
+        from utils.memory import list_all_memories
+        reply = list_all_memories()
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    if clean_lower in ("🎙️ morning briefing", "morning briefing"):
+        from reports.morning import run_morning_report
+        import asyncio
+        asyncio.create_task(run_morning_report(bot))
+        reply = "🌅 Initiating your Jarvis British Morning Voice Briefing now, sir..."
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    # Institutional Deep Research (e.g. "deep research on hal", "deep dive into reliance", "future outlook of infosys")
+    for prefix in [
+        "deep research on ", "deep research for ", "deep research ",
+        "deep dive on ", "deep dive into ", "deep dive for ", "deep dive ",
+        "future outlook for ", "future outlook of ", "future outlook on ", "future outlook ",
+        "research on ", "research "
+    ]:
+        if clean_lower.startswith(prefix):
+            target = clean_msg[len(prefix):].strip()
+            from utils.deep_research import execute_deep_research
+            reply = execute_deep_research(target)
+            working_memory.add_turn("assistant", reply)
+            return reply
+
     # Direct Stock Analysis (e.g. "analyze hal", "analyse reliance", "breakdown of tcs")
-    for prefix in ["analyze ", "analyse ", "analysis of ", "breakdown of ", "fundamental analysis of ", "deep dive on "]:
+    for prefix in ["analyze ", "analyse ", "analysis of ", "breakdown of ", "fundamental analysis of "]:
         if clean_lower.startswith(prefix):
             target = clean_msg[len(prefix):].strip()
             from utils.finance import fuzzy_resolve_stock
@@ -183,6 +234,11 @@ async def route_message(message: str, bot: Bot) -> str:
 
     elif intent == "analyze_stock":
         reply = await _handle_analyze_stock(params, message)
+
+    elif intent in ("deep_research", "deep_dive"):
+        from utils.deep_research import execute_deep_research
+        company_query = params.get("company") or params.get("stock") or message
+        reply = execute_deep_research(company_query)
 
     elif intent == "query_ipo":
         from utils.ipo import format_ipo_card

@@ -50,6 +50,8 @@ from bot.handlers import (
     cmd_watchlist,
     cmd_earnings,
     cmd_stealth,
+    cmd_dock,
+    cmd_deepdive,
     handle_callback_query,
     handle_text_message,
     handle_voice_message,
@@ -119,6 +121,9 @@ def build_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("earnings", cmd_earnings))
     app.add_handler(CommandHandler("stealth", cmd_stealth))
     app.add_handler(CommandHandler("delivery", cmd_stealth))
+    app.add_handler(CommandHandler("dock", cmd_dock))
+    app.add_handler(CommandHandler("deepdive", cmd_deepdive))
+    app.add_handler(CommandHandler("research", cmd_deepdive))
 
 
 

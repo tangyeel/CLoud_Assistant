@@ -5,7 +5,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
 from bot.middleware import authorized_only
 from bot.router import (
@@ -24,24 +24,85 @@ from utils.logger import logger
 _PENDING_EXAM_IMPORTS: dict[str, dict] = {}
 
 
+def get_command_dock() -> ReplyKeyboardMarkup:
+    """Persistent ergonomic one-tap mobile keyboard dock sitting beneath the chat input."""
+    keyboard = [
+        [KeyboardButton("📊 Market Snapshot"), KeyboardButton("🎓 Today's Schedule"), KeyboardButton("📝 Tasks")],
+        [KeyboardButton("💼 Theses & Portfolio"), KeyboardButton("🧠 Memory"), KeyboardButton("🎙️ Morning Briefing")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
+
+
 @authorized_only
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command."""
     await update.effective_message.reply_text(
-        "👋 **Welcome to your Autonomous AI Personal Assistant!**\n\n"
-        "I am connected to your Google Workspace and ready 24/7.\n\n"
+        "👋 **Welcome to J.A.R.V.I.S. — Your Autonomous Executive Assistant!**\n\n"
+        "I am connected to your Google Workspace and financial markets 24/7.\n\n"
+        "🎛️ **One-Tap Command Dock Active:**\n"
+        "Use the keyboard dock below for immediate one-tap access.\n\n"
         "🎙️ **Two-Way Voice Supported:**\n"
-        "Send me any voice note anytime — I will transcribe, execute, and speak back!\n\n"
+        "Send any voice note anytime — I will transcribe, condense, execute, and speak back in British English!\n\n"
         "📅 **Daily Briefings:**\n"
-        "• Morning report at 06:30 AM (emails, tasks, calendar, classroom, weather)\n"
-        "• Evening wind-down at 08:00 PM (commitments, deadlines, tomorrow's weather)\n\n"
-        "⚡ **Smart Safeguards Active:**\n"
-        "• 15-Minute Time-to-Leave lecture alerts\n"
-        "• Calendar conflict detection with auto-suggested free slots\n"
-        "• Thapar Attendance 75% safeguard (/attendance)\n\n"
+        "• Morning Voice Briefing at 07:30 AM (schedule, weather, unread emails, open tasks)\n"
+        "• Evening Wind-down at 09:30 PM (tomorrow's earliest commitment, deadlines, weather)\n\n"
+        "⚡ **Smart Safeguards:**\n"
+        "• 15-Minute Time-to-Leave class alerts with live Weather & Transit Advisory\n"
+        "• Thapar Attendance 75% safeguard (/attendance)\n"
+        "• Institutional Stock Deep Research (/deepdive <stock>)\n\n"
         "Type /help for direct slash commands.",
+        reply_markup=get_command_dock(),
         parse_mode="Markdown",
     )
+
+
+@authorized_only
+async def cmd_dock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /dock command — restore the persistent one-tap dock."""
+    await update.effective_message.reply_text(
+        "🎛️ **J.A.R.V.I.S. Command Dock Restored**\n\nTap any button below for instant execution, sir.",
+        reply_markup=get_command_dock(),
+        parse_mode="Markdown",
+    )
+
+
+@authorized_only
+async def cmd_deepdive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /deepdive or /research command — institutional equity research dossier."""
+    text = update.effective_message.text.strip()
+    for pfx in ["/deepdive", "/research"]:
+        if text.lower().startswith(pfx):
+            text = text[len(pfx):].strip()
+            break
+
+    if not text:
+        await update.effective_message.reply_text(
+            "❌ Please specify a stock symbol or company name.\n"
+            "Usage: `/deepdive HAL` or `/deepdive Reliance` or `/deepdive Tata Motors`",
+            parse_mode="Markdown"
+        )
+        return
+
+    status = await update.effective_message.reply_text(
+        f"🔬 *Initiating Institutional Deep Research on '{text}'...*\n"
+        f"_Gathers LTP, 52W Range, Last Earnings Breakdown, Next Declaration Date & Future Outlook._",
+        parse_mode="Markdown"
+    )
+    try:
+        from utils.deep_research import execute_deep_research
+        import asyncio
+        report = await asyncio.to_thread(execute_deep_research, text)
+        await status.delete()
+
+        chunks = _split_message(report)
+        for chunk in chunks:
+            try:
+                await update.effective_message.reply_text(chunk, parse_mode="Markdown")
+            except Exception:
+                await update.effective_message.reply_text(chunk)
+    except Exception as e:
+        logger.error(f"Deepdive command error: {e}")
+        await status.edit_text(f"❌ Deep research failed: {e}")
 
 
 def get_help_master_menu():
@@ -110,7 +171,10 @@ def get_help_section(section: str):
             "  ↳ *Description:* Official NSE deliverable volume screener. Detects where institutions are taking physical delivery into demat accounts (>60% delivery) vs day-trading churn.\n"
             "  ↳ *Usage:*\n"
             "    - Market-wide accumulation radar: `/stealth`\n"
-            "    - Specific stock delivery check: `/stealth HDFCBANK` or `/stealth INFY`"
+            "    - Specific stock delivery check: `/stealth HDFCBANK` or `/stealth INFY`\n\n"
+            "• `/deepdive <stock>`\n"
+            "  ↳ *Description:* Institutional equity research dossier featuring live LTP, 52-week High/Low range dynamics, last reported quarterly earnings triage (Revenue, Operating Margin, PAT), next declaration date with countdown, and future outlook catalysts.\n"
+            "  ↳ *Usage:* `/deepdive HAL` or `/deepdive Reliance` or `/research Tata Motors`"
         )
         return text, back_button
 
@@ -157,14 +221,15 @@ def get_help_section(section: str):
         text = (
             "🎙️ **VOICE, DAILY BRIEFINGS & TOOLS**\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
+            "• `/dock` — Open the persistent one-tap mobile command dock beneath chat.\n"
             "• `/morning` — Trigger on-demand Jarvis British voice morning briefing (weather, schedule, priority emails, tasks, open assignments).\n"
             "• `/evening` — Forward-looking evening debrief focusing on tomorrow's earliest commitment, weather, and open deadlines.\n"
             "• `/weather` — Real-time weather and precipitation chance for Patiala.\n"
             "• `/news` — Live market, tech, and financial news headlines.\n"
             "• `/search <query>` — Real-time DuckDuckGo web search with cited sources.\n"
             "• `/status` — Diagnostic report (Google OAuth health, AI cascade order, Edge-TTS status, Upstash Vector connection).\n\n"
-            "🎙️ *Two-Way Voice Support:*\n"
-            "Send any Telegram voice note anytime. J.A.R.V.I.S. transcribes via Groq Whisper, executes your request, and responds with British voice audio!"
+            "🎙️ *Two-Way Voice Support & Smart Condenser:*\n"
+            "Send any Telegram voice note anytime. J.A.R.V.I.S. speaks a 30-second crisp British executive briefing aloud while attaching the complete dossier in text!"
         )
         return text, back_button
 
@@ -175,11 +240,13 @@ def get_help_section(section: str):
             "📈 **MARKETS:**\n"
             "• `/market` — Real-time Indian & global index snapshot\n"
             "• `/stock <name>` — Quote, ratios, earnings date & news (typo-tolerant)\n"
+            "• `/deepdive <name>` — Institutional dossier (LTP, 52W range, earnings triage, next date, future outlook)\n"
             "• `/watchlist [add|remove]` — Custom earnings watchlist\n"
             "• `/earnings [stock]` — Autonomous quarterly financial results triage\n"
             "• `/ipo` — Live IPO GMP radar & subscription status\n"
             "• `/thesis [new|close]` — Investment thesis portfolio with target/SL tracking\n"
-            "• `/alerts [cancel]` — 5-minute price target & movement alerts\n\n"
+            "• `/alerts [cancel]` — 5-minute price target & movement alerts\n"
+            "• `/stealth [stock]` — Institutional deliverable volume accumulation radar\n\n"
             "🎓 **ACADEMIC & SCHEDULE:**\n"
             "• `/attendance` — Thapar 75% attendance safeguard & safe bunks\n"
             "• `/classes` — Google Classroom unsubmitted assignments with future due dates\n"
@@ -190,15 +257,16 @@ def get_help_section(section: str):
             "🧠 **MEMORY & AI:**\n"
             "• `/memory` — Inspect learned facts in Upstash Vector cloud\n"
             "• `/forget <topic>` — Erase a fact or outdated preference\n"
-            "• *Natural Language:* Ask *'Analyze <stock>'* for 4-pillar fundamental report\n\n"
+            "• *Natural Language:* Ask *'Analyze <stock>'* or *'Deep research on <stock>'*\n\n"
             "🎙️ **VOICE & UTILITIES:**\n"
+            "• `/dock` — Restore one-tap mobile keyboard dock\n"
             "• `/morning` — Morning British voice briefing\n"
             "• `/evening` — Evening preparatory debrief\n"
             "• `/weather` — Real-time Patiala forecast\n"
             "• `/news` — Top tech & finance news\n"
             "• `/search <q>` — Live web search\n"
             "• `/status` — System health & AI provider diagnostics\n\n"
-            "🎙️ *Send voice notes anytime for spoken audio responses!*"
+            "🎙️ *Send voice notes anytime for spoken audio responses with full text dossiers!*"
         )
         return all_text, back_button
 
@@ -844,6 +912,33 @@ async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text(f"❌ An error occurred processing your request: {e}")
 
 
+def _condense_for_voice(text: str) -> str:
+    """
+    Voice Condenser: Converts detailed assistant replies or analytical reports
+    into a punchy, articulate spoken overview (< 50 words) for natural J.A.R.V.I.S. voice playback.
+    """
+    import re
+    clean_text = text.strip()
+    if len(clean_text) < 220 and "\n\n" not in clean_text and not any(c in clean_text for c in ["|", "•", "1.", "2."]):
+        spoken = re.sub(r'[*_`#\[\]()]', '', clean_text).strip()
+        return spoken
+
+    from ai.gemini_client import generate_text
+    from ai.prompts import VOICE_CONDENSER_SYSTEM
+    prompt = f"Condense this response into 2 to 3 natural spoken sentences (strictly under 50 words) for the user, starting with 'Sir,':\n\n{clean_text[:1400]}"
+    try:
+        condensed = generate_text(prompt, system_instruction=VOICE_CONDENSER_SYSTEM)
+        condensed_clean = re.sub(r'[*_`#\[\]()]', '', condensed).strip()
+        if condensed_clean and len(condensed_clean) > 10:
+            return condensed_clean
+    except Exception as e:
+        logger.warning(f"Voice condenser generation error: {e}")
+
+    lines = [re.sub(r'[*_`#\[\]()]', '', l).strip() for l in clean_text.split("\n") if l.strip() and not l.startswith(("•", "-", "📌", "http", "🏛️", "📋"))]
+    fallback = " ".join(lines[:2])[:220]
+    return fallback or "Sir, I have processed your request and presented the full breakdown below."
+
+
 @authorized_only
 async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -884,32 +979,55 @@ async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             reply_text = reply
 
+        # Smart Voice Condenser: summarize long analytical reports into snappy speech
+        spoken_script = _condense_for_voice(reply_text)
+
         # Synthesize spoken voice reply
         from tts.speech import text_to_voice_note, send_audio_message
         audio_reply_path = None
         try:
-            audio_reply_path = await text_to_voice_note(reply_text)
+            audio_reply_path = await text_to_voice_note(spoken_script)
         except Exception as tts_err:
             logger.warning(f"Voice reply TTS error: {tts_err}")
 
         if audio_reply_path:
-            caption_text = f"🎙️ *\"{transcription}\"*\n\n{reply_text}"
-            if len(caption_text) > 1000:
-                caption_text = caption_text[:997] + "..."
-            await send_audio_message(
-                bot=context.bot,
-                chat_id=update.effective_chat.id,
-                audio_path=audio_reply_path,
-                caption=caption_text,
-                reply_markup=markup
-            )
+            full_caption = f"🎙️ *\"{transcription}\"*\n\n{reply_text}"
+            if len(full_caption) <= 1000:
+                await send_audio_message(
+                    bot=context.bot,
+                    chat_id=update.effective_chat.id,
+                    audio_path=audio_reply_path,
+                    caption=full_caption,
+                    reply_markup=markup
+                )
+            else:
+                short_caption = f"🎙️ *\"{transcription}\"*\n\n_{spoken_script}_\n\n📋 _Full detailed dossier follows below, sir._"
+                if len(short_caption) > 1000:
+                    short_caption = f"🎙️ *\"{transcription}\"*\n\n_Spoken briefing above · Full details below._"
+                await send_audio_message(
+                    bot=context.bot,
+                    chat_id=update.effective_chat.id,
+                    audio_path=audio_reply_path,
+                    caption=short_caption,
+                )
+                chunks = _split_message(reply_text)
+                for i, chunk in enumerate(chunks):
+                    m = markup if i == len(chunks) - 1 else None
+                    try:
+                        await update.effective_message.reply_text(chunk, reply_markup=m, parse_mode="Markdown")
+                    except Exception:
+                        await update.effective_message.reply_text(chunk, reply_markup=m)
+
             await status_msg.delete()
         else:
-            await status_msg.edit_text(
-                f"🎙️ *\"{transcription}\"*\n\n{reply_text}",
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
+            chunks = _split_message(reply_text)
+            for i, chunk in enumerate(chunks):
+                m = markup if i == len(chunks) - 1 else None
+                try:
+                    await update.effective_message.reply_text(chunk, reply_markup=m, parse_mode="Markdown")
+                except Exception:
+                    await update.effective_message.reply_text(chunk, reply_markup=m)
+            await status_msg.delete()
 
     except Exception as e:
         logger.error(f"Voice processing failed: {e}", exc_info=True)
