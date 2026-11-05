@@ -142,11 +142,36 @@ async def _check_upcoming_commitments():
                     is_class = ev.get("account") == "thapar"
                     alert_title = "🎓 Class Alert: Time to Leave!" if is_class else "⏰ Reminder: Time to Leave!"
 
+                    # Weather & Campus Transit Assessment
+                    transit_advisory = ""
+                    try:
+                        from utils.weather import get_weather
+                        from config import USER_CITY
+                        w = get_weather(USER_CITY)
+                        w_code = w.get("weather_code", 0)
+                        temp = w.get("temperature")
+                        cond = w.get("condition", "")
+                        rain_chance = w.get("rain_chance", 0)
+
+                        if w_code in (51, 53, 55, 61, 63, 65, 80, 81, 82, 95, 96, 99) or rain_chance >= 50:
+                            transit_advisory = f"🌧️ **Transit Advisory:** Active precipitation in {w['city']} ({cond}). Grab an umbrella before stepping out!\n"
+                        elif w_code in (45, 48):
+                            transit_advisory = f"🌫️ **Transit Advisory:** Dense fog reported in {w['city']}. Allow extra time for campus transit.\n"
+                        elif temp is not None and temp >= 38:
+                            transit_advisory = f"☀️ **Heat Advisory:** High temperature ({temp}°C) in {w['city']}. Stay hydrated!\n"
+                        elif temp is not None and temp <= 10:
+                            transit_advisory = f"🧥 **Cold Advisory:** Chilly ({temp}°C) outside in {w['city']}. Grab a warm jacket!\n"
+                    except Exception as wex:
+                        logger.debug(f"Transit advisory check skipped: {wex}")
+
+                    adv_str = f"\n{transit_advisory}" if transit_advisory else ""
+
                     msg = (
                         f"{alert_title}\n\n"
                         f"📌 {ev['summary']}\n"
                         f"{loc_str}"
-                        f"🕒 Starts at: {time_str} (~{int(diff_min)} mins remaining)\n\n"
+                        f"🕒 Starts at: {time_str} (~{int(diff_min)} mins remaining)\n"
+                        f"{adv_str}\n"
                         f"Head out now to arrive comfortably on time, sir."
                     )
                     await _bot_instance.send_message(

@@ -44,6 +44,13 @@ async def run_morning_report(bot: Bot) -> None:
     # 3. Generate script via AI
     script = ""
     try:
+        from utils.memory import recall_relevant_memories, format_memories_for_prompt
+        mems = recall_relevant_memories("morning routine focus academic priorities preferences", top_k=2)
+        mem_block = format_memories_for_prompt(mems)
+        sys_inst = MORNING_BRIEFING_SYSTEM
+        if mem_block:
+            sys_inst = f"{MORNING_BRIEFING_SYSTEM}\n\n{mem_block}\nSir's standing priorities are provided above; incorporate them subtly into today's focus."
+
         prompt = MORNING_BRIEFING_PROMPT.format(
             date=today_str,
             weather=weather_text,
@@ -52,7 +59,7 @@ async def run_morning_report(bot: Bot) -> None:
             tasks=tasks_text,
             assignments=classroom_text,
         )
-        script = generate_text(prompt, system_instruction=MORNING_BRIEFING_SYSTEM)
+        script = generate_text(prompt, system_instruction=sys_inst)
         logger.info(f"Jarvis briefing script generated ({len(script)} characters).")
     except Exception as e:
         logger.error(f"Script generation failed: {e}. Using structured fallback.")

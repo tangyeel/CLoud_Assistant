@@ -581,7 +581,14 @@ async def _handle_analyze_stock(params: dict, message: str) -> str:
     )
 
     try:
-        analysis = generate_text(prompt, system_instruction=ANALYST_SYSTEM)
+        from utils.memory import recall_relevant_memories, format_memories_for_prompt
+        user_mems = recall_relevant_memories(f"{ticker} {name} risk preference investment horizon", top_k=2)
+        mem_block = format_memories_for_prompt(user_mems)
+        sys_instruction = ANALYST_SYSTEM
+        if mem_block:
+            sys_instruction = f"{ANALYST_SYSTEM}\n\n{mem_block}\nNote: Align your valuation verdict and risk assessment with the user's personal profile above."
+
+        analysis = generate_text(prompt, system_instruction=sys_instruction)
         header = f"🏛️ **Financial Intelligence Assessment: {name} ({ticker})**\n\n"
         return header + analysis
     except Exception as e:

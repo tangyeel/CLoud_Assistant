@@ -140,6 +140,7 @@ def get_weather(city_name: str | None = None) -> dict:
                 "temperature": temp,
                 "feels_like": feels_like,
                 "condition": condition,
+                "weather_code": code,
                 "humidity": humidity,
                 "temp_max": t_max,
                 "temp_min": t_min,

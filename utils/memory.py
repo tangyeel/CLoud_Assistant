@@ -179,6 +179,7 @@ def recall_relevant_memories(query: str, top_k: int = 3, min_score: Optional[flo
     """
     Retrieve top relevant memories using semantic similarity.
     Strictly filters by similarity score >= MEMORY_SIMILARITY_THRESHOLD.
+    Excludes alert deduplication tokens and auto-purges temporally expired memories.
     Returns list of dicts: [{"id": str, "text": str, "score": float, "metadata": dict}]
     """
     threshold = min_score if min_score is not None else MEMORY_SIMILARITY_THRESHOLD
@@ -186,12 +187,15 @@ def recall_relevant_memories(query: str, top_k: int = 3, min_score: Optional[flo
     if not clean_query:
         return []
 
+    today_str = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
+    expired_ids = []
+
     # 1. Try Upstash Vector semantic query
     if _is_upstash_configured():
         url = _clean_upstash_url("/query-data")
         payload = {
             "data": clean_query,
-            "topK": top_k,
+            "topK": top_k + 5,
             "includeMetadata": True,
             "includeVectors": False,
         }
@@ -202,20 +206,37 @@ def recall_relevant_memories(query: str, top_k: int = 3, min_score: Optional[flo
                     results = resp.json().get("result", [])
                     matched = []
                     for item in results:
+                        item_id = str(item.get("id"))
+                        meta = item.get("metadata") or {}
+
+                        # Filter out alert deduplication tokens
+                        if item_id.startswith("alt_") or meta.get("type") == "alert_dedupe":
+                            continue
+
+                        # Check temporal expiry
+                        exp_at = meta.get("expires_at")
+                        if exp_at and exp_at < today_str:
+                            expired_ids.append(item_id)
+                            continue
+
                         score = float(item.get("score", 0.0))
                         # Upstash cosine similarity score is between -1 and 1 (or 0 and 1)
                         if score >= threshold:
-                            meta = item.get("metadata") or {}
                             text = meta.get("text") or item.get("data") or ""
                             matched.append({
-                                "id": str(item.get("id")),
+                                "id": item_id,
                                 "text": text,
                                 "score": round(score, 3),
                                 "metadata": meta,
                             })
+
+                    if expired_ids:
+                        logger.info(f"Purging {len(expired_ids)} expired memories from vector store.")
+                        delete_memory_vectors(expired_ids)
+
                     if matched:
-                        logger.info(f"Recalled {len(matched)} memories for query '{query[:40]}' (scores: {[m['score'] for m in matched]})")
-                    return matched
+                        logger.info(f"Recalled {len(matched[:top_k])} memories for query '{query[:40]}' (scores: {[m['score'] for m in matched[:top_k]]})")
+                    return matched[:top_k]
                 else:
                     logger.warning(f"Upstash query HTTP {resp.status_code}: {resp.text}")
         except Exception as e:
@@ -229,16 +250,32 @@ def recall_relevant_memories(query: str, top_k: int = 3, min_score: Optional[flo
     query_words = set(clean_query.lower().split())
     ranked = []
     for m in local_mems:
+        item_id = str(m.get("id", ""))
+        meta = m.get("metadata", {})
+
+        # Filter out alert tokens
+        if item_id.startswith("alt_") or meta.get("type") == "alert_dedupe":
+            continue
+
+        # Check temporal expiry
+        exp_at = meta.get("expires_at")
+        if exp_at and exp_at < today_str:
+            expired_ids.append(item_id)
+            continue
+
         mem_text = m.get("text", "")
         mem_words = set(mem_text.lower().split())
         overlap = len(query_words.intersection(mem_words))
         if overlap > 0:
             ranked.append({
-                "id": m["id"],
+                "id": item_id,
                 "text": mem_text,
                 "score": round(overlap / max(1, len(query_words)), 2),
-                "metadata": m.get("metadata", {}),
+                "metadata": meta,
             })
+
+    if expired_ids:
+        delete_memory_vectors(expired_ids)
 
     ranked.sort(key=lambda x: x["score"], reverse=True)
     return ranked[:top_k]
@@ -299,13 +336,23 @@ async def reflect_and_memorize(user_message: str, assistant_reply: str) -> None:
     entity = extracted.get("entity", "").strip()
     category = extracted.get("category", "preference")
     is_correction = extracted.get("is_correction", False)
+    raw_exp = extracted.get("expires_at")
+    expires_at = None
+    if isinstance(raw_exp, str) and raw_exp.strip():
+        raw_exp = raw_exp.strip()
+        try:
+            # Validate format YYYY-MM-DD
+            datetime.strptime(raw_exp, "%Y-%m-%d")
+            expires_at = raw_exp
+        except ValueError:
+            expires_at = None
 
     # 1. Gatekeeper Filter: strictly reject noise, transient lookups, or low importance
     if not should_store or importance < MEMORY_GATEKEEPER_THRESHOLD or not memory_text:
         logger.debug(f"Gatekeeper discarded: '{clean_user[:40]}' (importance={importance})")
         return
 
-    logger.info(f"Gatekeeper approved memory (score={importance}/10): '{memory_text}' [Entity: {entity}]")
+    logger.info(f"Gatekeeper approved memory (score={importance}/10): '{memory_text}' [Entity: {entity}, Expires: {expires_at}]")
 
     # 2. Entity Conflict Resolution: check if prior memories about this entity exist
     if entity:
@@ -325,10 +372,12 @@ async def reflect_and_memorize(user_message: str, assistant_reply: str) -> None:
     mem_id = f"mem_{uuid.uuid4().hex[:8]}"
     now_ist = datetime.now(ZoneInfo(TIMEZONE)).isoformat()
     metadata = {
+        "type": "memory",
         "text": memory_text,
         "entity": entity,
         "category": category,
         "importance": importance,
+        "expires_at": expires_at,
         "created_at": now_ist,
     }
 
@@ -342,6 +391,8 @@ async def reflect_and_memorize(user_message: str, assistant_reply: str) -> None:
 def list_all_memories() -> str:
     """Format all stored user memories into an auditable card."""
     memories = []
+    expired_ids = []
+    today_str = datetime.now(ZoneInfo(TIMEZONE)).strftime("%Y-%m-%d")
 
     # If Upstash is configured, query range or dump
     if _is_upstash_configured():
@@ -349,17 +400,30 @@ def list_all_memories() -> str:
         url = _clean_upstash_url("/range")
         try:
             with httpx.Client(timeout=8.0) as client:
-                resp = client.post(url, headers=_upstash_headers(), json={"cursor": "0", "limit": 50, "includeMetadata": True})
+                resp = client.post(url, headers=_upstash_headers(), json={"cursor": "0", "limit": 100, "includeMetadata": True})
                 if resp.status_code == 200:
                     vectors = resp.json().get("result", {}).get("vectors", [])
                     for v in vectors:
+                        v_id = str(v.get("id", ""))
                         meta = v.get("metadata") or {}
+
+                        # Filter out alert deduplication tokens
+                        if v_id.startswith("alt_") or meta.get("type") == "alert_dedupe":
+                            continue
+
+                        # Check temporal expiry
+                        exp_at = meta.get("expires_at")
+                        if exp_at and exp_at < today_str:
+                            expired_ids.append(v_id)
+                            continue
+
                         memories.append({
-                            "id": v["id"],
+                            "id": v_id,
                             "text": meta.get("text") or v.get("data") or "Fact",
                             "entity": meta.get("entity", "General"),
                             "category": meta.get("category", "preference"),
                             "importance": meta.get("importance", 7),
+                            "expires_at": exp_at,
                         })
         except Exception as e:
             logger.debug(f"Upstash range error: {e}")
@@ -368,14 +432,30 @@ def list_all_memories() -> str:
     if not memories:
         local_mems = _load_local_memories()
         for m in local_mems:
+            m_id = str(m.get("id", ""))
             meta = m.get("metadata", {})
+
+            # Filter out alert tokens
+            if m_id.startswith("alt_") or meta.get("type") == "alert_dedupe":
+                continue
+
+            exp_at = meta.get("expires_at")
+            if exp_at and exp_at < today_str:
+                expired_ids.append(m_id)
+                continue
+
             memories.append({
-                "id": m["id"],
+                "id": m_id,
                 "text": m.get("text", ""),
                 "entity": meta.get("entity", "General"),
                 "category": meta.get("category", "preference"),
                 "importance": meta.get("importance", 7),
+                "expires_at": exp_at,
             })
+
+    if expired_ids:
+        logger.info(f"Purging {len(expired_ids)} expired memories during listing.")
+        delete_memory_vectors(expired_ids)
 
     if not memories:
         status_note = "☁️ Upstash Cloud Vector DB Active" if _is_upstash_configured() else "📁 Local Resilient Store Active"
@@ -390,7 +470,8 @@ def list_all_memories() -> str:
     lines = [f"🧠 **Jarvis Learned Memory ({len(memories)} facts)**\n_{status_note}_\n"]
     for i, m in enumerate(memories, 1):
         cat_tag = f" `[{m['category'].title()}]`" if m.get("category") else ""
-        lines.append(f"{i}. {m['text']}{cat_tag} (`{m['id']}`)")
+        exp_tag = f" ⏳ _(Expires: {m['expires_at']})_" if m.get("expires_at") else ""
+        lines.append(f"{i}. {m['text']}{cat_tag}{exp_tag} (`{m['id']}`)")
     lines.append("\n💡 _Use `/forget <topic or id>` if you ever want me to erase a memory._")
     return "\n".join(lines)
 

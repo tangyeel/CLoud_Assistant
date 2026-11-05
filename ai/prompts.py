@@ -183,10 +183,11 @@ Output strictly valid JSON with no markdown wrapping:
   "category": "preference" | "financial_profile" | "academic" | "routine" | "directive",
   "entity": "Primary topic/company/concept (e.g. 'Tata Motors', 'Risk Appetite', 'Attendance')",
   "memory_text": "Clean, third-person declarative sentence summarizing the fact (e.g. 'User prefers large-cap dividend stocks with low debt and avoids high-risk penny stocks.')",
-  "is_correction": true or false (true if user is updating/reversing an older belief)
+  "is_correction": true or false (true if user is updating/reversing an older belief),
+  "expires_at": "YYYY-MM-DD" or null (set date if this fact has a natural expiration, like an exam period, project due date, or trip; otherwise null)
 }
 If should_store is false, return:
-{"should_store": false, "importance_score": 0, "category": "", "entity": "", "memory_text": "", "is_correction": false}"""
+{"should_store": false, "importance_score": 0, "category": "", "entity": "", "memory_text": "", "is_correction": false, "expires_at": null}"""
 
 MEMORY_EXTRACTOR_PROMPT = """Analyze this conversation exchange:
 User: "{user_message}"
