@@ -49,6 +49,7 @@ from bot.handlers import (
     cmd_forget,
     cmd_watchlist,
     cmd_earnings,
+    cmd_stealth,
     handle_callback_query,
     handle_text_message,
     handle_voice_message,
@@ -116,6 +117,8 @@ def build_telegram_app() -> Application | None:
     app.add_handler(CommandHandler("forget", cmd_forget))
     app.add_handler(CommandHandler("watchlist", cmd_watchlist))
     app.add_handler(CommandHandler("earnings", cmd_earnings))
+    app.add_handler(CommandHandler("stealth", cmd_stealth))
+    app.add_handler(CommandHandler("delivery", cmd_stealth))
 
 
 

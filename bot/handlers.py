@@ -105,7 +105,12 @@ def get_help_section(section: str):
             "  ↳ *Usage:*\n"
             "    - View active: `/alerts`\n"
             "    - Cancel: `/alerts cancel alt_123` or `/alerts cancel Reliance`\n"
-            "    - Set in plain English: *'Alert me when Infosys hits 1900'* or *'Alert if Nifty drops 2%'*"
+            "    - Set in plain English: *'Alert me when Infosys hits 1900'* or *'Alert if Nifty drops 2%'*\n\n"
+            "• `/stealth [stock]`\n"
+            "  ↳ *Description:* Official NSE deliverable volume screener. Detects where institutions are taking physical delivery into demat accounts (>60% delivery) vs day-trading churn.\n"
+            "  ↳ *Usage:*\n"
+            "    - Market-wide accumulation radar: `/stealth`\n"
+            "    - Specific stock delivery check: `/stealth HDFCBANK` or `/stealth INFY`"
         )
         return text, back_button
 
@@ -451,6 +456,25 @@ async def cmd_earnings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         for w in watchlist[:5]:
             card = triage_stock_earnings(w["ticker"], w["company"])
             await update.effective_message.reply_text(card, parse_mode="Markdown")
+
+
+@authorized_only
+async def cmd_stealth(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /stealth [stock] — institutional deliverable volume screener."""
+    args = context.args or []
+    from utils.stealth_delivery import format_stealth_delivery_card
+    from utils.finance import fuzzy_resolve_stock
+
+    if args:
+        query = " ".join(args)
+        name, ticker = fuzzy_resolve_stock(query)
+        target = ticker or query
+        card = format_stealth_delivery_card(custom_symbol=target)
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+    else:
+        card = format_stealth_delivery_card()
+        await update.effective_message.reply_text(card, parse_mode="Markdown")
+
 
 
 

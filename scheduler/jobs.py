@@ -334,6 +334,28 @@ async def _check_watchlist_earnings_job():
         logger.warning(f"Watchlist earnings scan error: {e}")
 
 
+async def _check_stealth_delivery_job():
+    """
+    18:30 IST Post-Market Scan: Deliverable Volume & Smart Money Demat Accumulation.
+    Dispatches the daily delivery radar to Telegram.
+    """
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.stealth_delivery import format_stealth_delivery_card
+        card = format_stealth_delivery_card()
+        if card and "Unable to load" not in card:
+            await _bot_instance.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=card,
+                parse_mode="Markdown",
+            )
+            logger.info("Dispatched Stealth Delivery Radar to Telegram.")
+    except Exception as e:
+        logger.warning(f"Stealth delivery scheduler error: {e}")
+
+
 def _job_error_listener(event):
     if event.exception:
         logger.error(f"Scheduler job error in '{event.job_id}': {event.exception}", exc_info=True)
@@ -451,6 +473,19 @@ def start_scheduler():
         misfire_grace_time=600,
     )
     logger.info("📅 Watchlist Earnings Triage Scanner scheduled at 17:30 IST weekdays")
+
+    # Stealth Institutional Delivery Radar (18:30 IST Mon-Fri post-market)
+    scheduler.add_job(
+        _check_stealth_delivery_job,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=18,
+        minute=30,
+        id="stealth_delivery_scanner",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info("📅 Stealth Institutional Delivery Scanner scheduled at 18:30 IST weekdays")
 
 
 

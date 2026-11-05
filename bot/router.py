@@ -183,6 +183,17 @@ async def route_message(message: str, bot: Bot) -> str:
         else:
             reply = format_watchlist_card()
 
+    elif intent == "query_stealth_delivery":
+        from utils.stealth_delivery import format_stealth_delivery_card
+        from utils.finance import fuzzy_resolve_stock
+        stock_query = params.get("company") or params.get("stock") or ""
+        if stock_query:
+            name, ticker = fuzzy_resolve_stock(stock_query)
+            reply = format_stealth_delivery_card(custom_symbol=ticker or stock_query)
+        else:
+            reply = format_stealth_delivery_card()
+
+
 
     elif intent == "query_memory":
         from utils.memory import list_all_memories

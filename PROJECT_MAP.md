@@ -58,11 +58,12 @@ attendance check-in and audio cleanup
 | TTS | Edge-TTS primary with gTTS fallback; FFmpeg/ffmpeg binary conversion for Telegram voice OGG when possible; chime helper and stale-file cleanup. | `tts/speech.py`, `assets/` |
 | Attendance | Local JSON counts per subject, 75% safe-bunks/required-classes calculation, inline check-in buttons; data is ignored by Git. | `utils/attendance.py`, `data/` |
 | Weather/news/search | Open-Meteo geocode/forecast; DDGS search; finance/tech news retrieval; callable by slash command and natural-language router. | `utils/weather.py`, `utils/search.py`, `utils/news.py` |
+| Institutional Delivery Radar | Official NSE Bhavcopy deliverable volume screener (>60% delivery, >₹15Cr turnover); on-demand `/stealth` and 18:30 IST post-market scanner. | `utils/stealth_delivery.py`, `scheduler/jobs.py` |
 | Diagnostics/resilience | `/status`, rotating Loguru logger, retry decorators, health endpoint, isolated fetch and AI/TTS/text fallbacks in reports. | `bot/handlers.py`, `utils/logger.py`, `utils/retry.py`, `utils/health.py` |
 
 ### Telegram commands registered in `main.py`
 
-`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`, `/watchlist`, `/earnings`.
+`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`, `/watchlist`, `/earnings`, `/stealth`.
 
 ## Spec status and gaps
 

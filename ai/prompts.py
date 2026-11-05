@@ -101,6 +101,8 @@ Supported intents:
   Parameters: "action" ("add" | "remove" | "view"), "stocks" (str)
 - "query_earnings": User asks for quarterly earnings results, reports, or beats/misses for a stock or their watchlist ("what are infosys earnings?", "check quarterly results").
   Parameters: "company" (str, optional)
+- "query_stealth_delivery": User asks for deliverable volume, stealth institutional accumulation, or delivery percentage for a stock or market ("check delivery for reliance", "stealth accumulation", "show delivery radar").
+  Parameters: "company" (str, optional)
 - "query_memory": User asks what Jarvis remembers or knows about them ("what do you know about me?", "show memory").
 - "forget_memory": User asks to erase or forget a topic, fact, or memory ("forget that I bought Tata Motors", "forget my preference for X").
   Parameters: "topic" (str)
