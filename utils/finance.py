@@ -199,6 +199,41 @@ _NSE_SYMBOLS: dict[str, str] | None = None   # {company_name_lower: ticker}
 _SYMBOLS_PATH = Path(__file__).parent.parent / "data" / "nse_symbols.json"
 
 
+def _sync_nse_symbols_from_exchange() -> dict[str, str]:
+    """Download full official equity list from NSE (EQUITY_L.csv) and cache to disk."""
+    import httpx, csv, io
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    url = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+    symbols: dict[str, str] = dict(_BUILTIN_NSE_MAP())
+    try:
+        r = httpx.get(url, headers=headers, timeout=6.0)
+        if r.status_code == 200:
+            reader = csv.DictReader(io.StringIO(r.text))
+            for row in reader:
+                sym = row.get("SYMBOL", "").strip().upper()
+                name = row.get("NAME OF COMPANY", "").strip()
+                if not sym:
+                    continue
+                ticker = f"{sym}.NS"
+                symbols[sym.lower()] = ticker
+                if name:
+                    clean_name = name.lower()
+                    symbols[clean_name] = ticker
+                    for suffix in [" limited", " ltd.", " ltd", " india limited", " (india) limited"]:
+                        if clean_name.endswith(suffix):
+                            short_name = clean_name[:-len(suffix)].strip()
+                            if short_name and short_name not in symbols:
+                                symbols[short_name] = ticker
+
+            _SYMBOLS_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _SYMBOLS_PATH.write_text(json.dumps(symbols, indent=2, ensure_ascii=False), encoding="utf-8")
+            logger.info(f"Synchronized {len(symbols)} NSE symbol mappings to disk.")
+            return symbols
+    except Exception as e:
+        logger.warning(f"Failed to sync NSE symbols from exchange: {e}")
+    return symbols
+
+
 def _load_nse_symbols() -> dict[str, str]:
     global _NSE_SYMBOLS
     if _NSE_SYMBOLS is not None:
@@ -207,14 +242,15 @@ def _load_nse_symbols() -> dict[str, str]:
     if _SYMBOLS_PATH.exists():
         try:
             raw: dict = json.loads(_SYMBOLS_PATH.read_text(encoding="utf-8"))
-            _NSE_SYMBOLS = {k.lower(): v for k, v in raw.items()}
-            logger.info(f"Loaded {len(_NSE_SYMBOLS)} NSE symbols from disk.")
-            return _NSE_SYMBOLS
+            if len(raw) >= 500:
+                _NSE_SYMBOLS = {k.lower(): v for k, v in raw.items()}
+                logger.info(f"Loaded {len(_NSE_SYMBOLS)} NSE symbols from disk.")
+                return _NSE_SYMBOLS
         except Exception as e:
             logger.warning(f"Could not load nse_symbols.json: {e}")
 
-    # Fallback: minimal inline map for top 50 stocks
-    _NSE_SYMBOLS = _BUILTIN_NSE_MAP()
+    # Auto-sync full list from exchange or fallback to builtin
+    _NSE_SYMBOLS = _sync_nse_symbols_from_exchange()
     return _NSE_SYMBOLS
 
 
@@ -310,19 +346,48 @@ def fuzzy_resolve_stock(query: str) -> tuple[Optional[str], Optional[str]]:
     """
     Fuzzy-match a user query to a stock ticker.
     Returns (company_name, ticker) or (None, None) if no match.
+    Prioritizes exact ticker matches before running typo fuzzy matching.
     """
-    q = query.strip().lower()
+    clean_raw = query.strip()
+    q = clean_raw.lower()
     sym_map = _load_nse_symbols()
 
-    # 1. Exact match
+    # 1. Exact match in sym_map keys
     if q in sym_map:
         return q.title(), sym_map[q]
 
-    # 2. Try rapidfuzz for best fuzzy match
+    # Strip .NS or .BO suffix if provided by user (e.g. "CUMMINSIND.NS" -> "cumminsind")
+    bare_q = q.replace(".ns", "").replace(".bo", "").strip()
+    if bare_q in sym_map:
+        return bare_q.title(), sym_map[bare_q]
+
+    # 2. Check if clean_raw matches any ticker in sym_map values
+    upper_q = clean_raw.upper().replace(".NS", "").replace(".BO", "")
+    target_ns = f"{upper_q}.NS"
+    for name_k, t_val in sym_map.items():
+        if t_val.upper() == target_ns:
+            return name_k.title(), t_val
+
+    # 3. Direct ticker validation for single-word queries (e.g. unknown new IPOs or global symbols)
+    if " " not in clean_raw and len(clean_raw) <= 15:
+        try:
+            import yfinance as yf
+            t_obj = yf.Ticker(target_ns)
+            fast_p = getattr(t_obj.fast_info, "last_price", None)
+            if fast_p is not None:
+                long_n = getattr(t_obj.info, "get", lambda k: None)("longName") or upper_q
+                logger.info(f"Direct ticker validated '{target_ns}' -> '{long_n}'")
+                sym_map[q] = target_ns
+                sym_map[bare_q] = target_ns
+                return long_n, target_ns
+        except Exception:
+            pass
+
+    # 4. RapidFuzz with strict threshold (score_cutoff=82) to avoid false positive cross-company collisions
     try:
         from rapidfuzz import process, fuzz  # type: ignore
         match = process.extractOne(
-            q, list(sym_map.keys()), scorer=fuzz.WRatio, score_cutoff=65
+            q, list(sym_map.keys()), scorer=fuzz.WRatio, score_cutoff=82
         )
         if match:
             matched_name, score, _ = match
@@ -331,16 +396,17 @@ def fuzzy_resolve_stock(query: str) -> tuple[Optional[str], Optional[str]]:
     except ImportError:
         pass
 
-    # 3. Fallback: difflib
-    close = difflib.get_close_matches(q, list(sym_map.keys()), n=1, cutoff=0.6)
+    # 5. Fallback: difflib with strict cutoff (0.8)
+    close = difflib.get_close_matches(q, list(sym_map.keys()), n=1, cutoff=0.8)
     if close:
         matched = close[0]
         return matched.title(), sym_map[matched]
 
-    # 4. Substring match
-    for name, ticker in sym_map.items():
-        if q in name or name in q:
-            return name.title(), ticker
+    # 6. Prefix match for longer queries (e.g. "cummins ind" -> "cummins india")
+    if len(q) >= 5:
+        for name, ticker in sym_map.items():
+            if name.startswith(q) or q.startswith(name):
+                return name.title(), ticker
 
     return None, None
 
