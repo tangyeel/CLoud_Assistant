@@ -187,16 +187,21 @@ async def _check_upcoming_commitments():
 
 
 async def _attendance_daily_poll():
-    """Daily check-in for attendance right after class hours (14:05)."""
+    """Daily check-in for attendance strictly on weekdays after class hours (17:05)."""
     if not _bot_instance or not TELEGRAM_CHAT_ID:
         return
 
-    from utils.attendance import format_attendance_card
+    from utils.attendance import get_todays_classes, format_attendance_card
     try:
+        classes = get_todays_classes()
+        if not classes:
+            logger.info("No academic lectures conducted today; skipping attendance poll.")
+            return
+
         card, markup = format_attendance_card()
         msg = (
-            f"🎓 **Daily Attendance Check-In**\n\n"
-            f"Classes have concluded for the afternoon. Did you attend all your scheduled lectures today?\n\n"
+            f"🎓 **Daily Academic Attendance Check-In**\n\n"
+            f"University lectures have concluded for the day. Did you attend all your scheduled classes today?\n\n"
             f"{card}"
         )
         await _bot_instance.send_message(
@@ -310,16 +315,39 @@ async def _saturday_ipo_job():
 
     try:
         from utils.ipo import format_ipo_card
-        card = format_ipo_card()
+        card, markup = format_ipo_card()
         msg = f"🌅 **Saturday Weekend IPO Intelligence Briefing**\n\n{card}"
         await _bot_instance.send_message(
             chat_id=TELEGRAM_CHAT_ID,
             text=msg,
+            reply_markup=markup,
             parse_mode="Markdown",
         )
         logger.info("✅ Dispatched Saturday IPO Briefing to Telegram.")
     except Exception as e:
         logger.error(f"Saturday IPO job failed: {e}", exc_info=True)
+
+
+async def _ipo_listing_tracker_job():
+    """
+    Monitor tracked IPO applications for Listing Day Debut & Day-End Close performance.
+    Dispatches notifications on the morning of listing (10:00 AM) and market close (15:45 IST).
+    """
+    if not _bot_instance or not TELEGRAM_CHAT_ID:
+        return
+
+    try:
+        from utils.ipo import check_ipo_listing_day_alerts
+        alerts = check_ipo_listing_day_alerts()
+        for alert_msg in alerts:
+            await _bot_instance.send_message(
+                chat_id=TELEGRAM_CHAT_ID,
+                text=alert_msg,
+                parse_mode="Markdown",
+            )
+            logger.info("Dispatched IPO listing notification to Telegram.")
+    except Exception as e:
+        logger.warning(f"Error checking IPO listing alerts: {e}")
 
 
 async def _check_market_alerts_job():
@@ -448,15 +476,28 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Daily Attendance Poll (14:05 daily)
+    # Daily Attendance Poll (17:05 Mon-Fri, strictly after class hours)
     scheduler.add_job(
         _attendance_daily_poll,
         trigger="cron",
-        hour=14,
+        day_of_week="mon-fri",
+        hour=17,
         minute=5,
         id="attendance_daily_poll",
         replace_existing=True,
     )
+
+    # IPO Listing Day & Performance Monitor (Every 15m 09:45-16:15 IST weekdays)
+    scheduler.add_job(
+        _ipo_listing_tracker_job,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour="9-16",
+        minute="0,15,30,45",
+        id="ipo_listing_tracker",
+        replace_existing=True,
+    )
+    logger.info("📅 IPO Listing Day & Performance Monitor scheduled (09:45-16:15 weekdays)")
 
     # Pre-Market Radar Job (09:00 IST daily)
     scheduler.add_job(

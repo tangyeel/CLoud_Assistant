@@ -152,9 +152,9 @@ def get_help_section(section: str):
             "• `/earnings [stock]`\n"
             "  ↳ *Description:* Autonomous quarterly earnings triage. Evaluates Revenue, Operating Margin, Net Profit, and Consensus Beat/Miss %. Cross-checks against active investment theses.\n"
             "  ↳ *Usage:* `/earnings Infosys` or `/earnings` (triages all watchlist stocks)\n\n"
-            "• `/ipo`\n"
-            "  ↳ *Description:* Upcoming and open IPOs with issue price band, Grey Market Premium (GMP ₹ and % est. gain), subscription multiplier, and dates.\n"
-            "  ↳ *Usage:* `/ipo` *(also auto-sent every Saturday at 08:00 AM)*\n\n"
+            "• `/ipo [applied | awaiting | apply <name>]`\n"
+            "  ↳ *Description:* Live IPO radar strictly filtered to active issues that have not closed. Features application lifecycle tracking with autonomous morning listing alerts (10:00 AM) and market close performance debriefs (15:45 IST).\n"
+            "  ↳ *Usage:* `/ipo` (active open issues), `/ipo awaiting` (closed, listing soon), or say *'I applied for <company>'*\n\n"
             "• `/thesis [new | close]`\n"
             "  ↳ *Description:* Track high-conviction investment theses with entry price, targets, stop-losses, and rationale. Background checks alert when target or stoploss is breached.\n"
             "  ↳ *Usage:*\n"
@@ -183,7 +183,7 @@ def get_help_section(section: str):
             "🎓 **ACADEMIC & SCHEDULE SAFEGUARDS**\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "• `/attendance`\n"
-            "  ↳ *Description:* Thapar University 75% attendance safeguard. Tracks attended vs missed lectures, calculates safe bunks remaining, and prompts for check-ins.\n"
+            "  ↳ *Description:* Thapar University 75% attendance safeguard. Dynamically displays today's date and scheduled university lectures from Google Calendar, safe bunks remaining, and post-lecture check-in.\n"
             "  ↳ *Usage:* `/attendance`\n\n"
             "• `/classes`\n"
             "  ↳ *Description:* Scans Google Classroom across Personal & Thapar accounts. Only displays actionable, unsubmitted assignments with future due dates.\n"
@@ -389,10 +389,54 @@ async def cmd_stock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 @authorized_only
 async def cmd_ipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /ipo — Live IPO intelligence & GMP report."""
-    from utils.ipo import format_ipo_card
-    card = format_ipo_card()
-    await update.effective_message.reply_text(card, parse_mode="Markdown")
+    """Handle /ipo — Live IPO intelligence, active filter, and application tracker."""
+    args = context.args or []
+    from utils.ipo import (
+        format_ipo_card,
+        format_applied_ipos_card,
+        apply_for_ipo,
+        cancel_applied_ipo,
+    )
+
+    if not args:
+        card, markup = format_ipo_card(view="active")
+        await update.effective_message.reply_text(card, reply_markup=markup, parse_mode="Markdown")
+        return
+
+    sub = args[0].lower()
+    if sub in ("applied", "my"):
+        card, markup = format_applied_ipos_card()
+        await update.effective_message.reply_text(card, reply_markup=markup, parse_mode="Markdown")
+    elif sub in ("awaiting", "listings"):
+        card, markup = format_ipo_card(view="awaiting")
+        await update.effective_message.reply_text(card, reply_markup=markup, parse_mode="Markdown")
+    elif sub in ("apply", "track"):
+        if len(args) < 2:
+            await update.effective_message.reply_text("Usage: `/ipo apply <Company Name> [Issue Price]`", parse_mode="Markdown")
+            return
+        company = " ".join(args[1:])
+        price_val = None
+        for word in args[1:]:
+            try:
+                price_val = float(word.replace("₹", ""))
+                company = company.replace(word, "").strip()
+                break
+            except ValueError:
+                pass
+        _, reply = apply_for_ipo(company, issue_price=price_val)
+        await update.effective_message.reply_text(reply, parse_mode="Markdown")
+    elif sub in ("cancel", "remove"):
+        if len(args) < 2:
+            await update.effective_message.reply_text("Usage: `/ipo cancel <Company Name>`", parse_mode="Markdown")
+            return
+        company = " ".join(args[1:])
+        _, reply = cancel_applied_ipo(company)
+        await update.effective_message.reply_text(reply, parse_mode="Markdown")
+    else:
+        # User passed company name directly: e.g. /ipo Antala
+        company = " ".join(args)
+        _, reply = apply_for_ipo(company)
+        await update.effective_message.reply_text(reply, parse_mode="Markdown")
 
 
 @authorized_only
@@ -716,31 +760,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("❌ Scheduling request cancelled.")
 
     elif data == "att_all_today":
-        from utils.attendance import record_attendance, format_attendance_card, _load_data
-        from google_services.calendar_service import get_todays_events
+        from utils.attendance import record_attendance, format_attendance_card, get_todays_classes
+        classes = get_todays_classes()
+        if not classes:
+            await query.answer("Sir, no university lectures were scheduled for today.", show_alert=True)
+        else:
+            unique_subjs = list(dict.fromkeys(c["subject"] for c in classes))
+            for subj in unique_subjs:
+                record_attendance(subj, "attended")
 
-        # Identify actual classes conducted today from Google Calendar
-        today_subjects = []
-        try:
-            events = get_todays_events()
-            for ev in events:
-                summary = ev.get("summary", "").replace(" [Thapar]", "").strip()
-                if summary and summary not in today_subjects:
-                    today_subjects.append(summary)
-        except Exception:
-            pass
-
-        # Fallback to existing recorded subjects if no calendar events found today
-        if not today_subjects:
-            data_dict = _load_data()
-            today_subjects = list(data_dict.get("subjects", {}).keys())
-
-        for subj in today_subjects:
-            record_attendance(subj, "attended")
-
-        card, markup = format_attendance_card()
-        subj_list_str = ", ".join(today_subjects[:3])
-        await query.edit_message_text(f"🎉 **Recorded attendance for today's lectures ({subj_list_str})!**\n\n{card}", reply_markup=markup, parse_mode="Markdown")
+            card, markup = format_attendance_card()
+            subj_list_str = ", ".join(unique_subjs)
+            await query.edit_message_text(
+                f"✅ **Recorded attendance for today's lectures ({subj_list_str})!**\n\n{card}",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
 
     elif data == "att_menu_missed":
         from utils.attendance import get_attendance_stats
@@ -779,6 +814,26 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif data == "att_back":
         from utils.attendance import format_attendance_card
         card, markup = format_attendance_card()
+        await query.edit_message_text(card, reply_markup=markup, parse_mode="Markdown")
+
+    elif data == "ipo_view_active":
+        from utils.ipo import format_ipo_card
+        card, markup = format_ipo_card(view="active")
+        await query.edit_message_text(card, reply_markup=markup, parse_mode="Markdown")
+
+    elif data == "ipo_view_awaiting":
+        from utils.ipo import format_ipo_card
+        card, markup = format_ipo_card(view="awaiting")
+        await query.edit_message_text(card, reply_markup=markup, parse_mode="Markdown")
+
+    elif data == "ipo_view_applied":
+        from utils.ipo import format_applied_ipos_card
+        card, markup = format_applied_ipos_card()
+        await query.edit_message_text(card, reply_markup=markup, parse_mode="Markdown")
+
+    elif data == "ipo_refresh":
+        from utils.ipo import format_ipo_card
+        card, markup = format_ipo_card(view="active")
         await query.edit_message_text(card, reply_markup=markup, parse_mode="Markdown")
 
 

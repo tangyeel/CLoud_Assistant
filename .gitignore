@@ -24,6 +24,7 @@ test_*.ogg
 
 # Local user attendance & runtime state
 data/attendance.json
+data/ipo_applications.json
 data/alert_history.json
 !data/.gitkeep
 

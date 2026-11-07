@@ -148,6 +148,46 @@ async def route_message(message: str, bot: Bot) -> str:
                 working_memory.add_turn("assistant", reply)
                 return reply
 
+    # IPO Application Logging & Tracking (e.g. "i applied for antala industries", "applied for vedant poly fabs at 94")
+    for prefix in [
+        "i applied for ipo ", "i applied for ", "i applied to ", "i applied in ",
+        "applied for ipo ", "applied for ", "applied to ",
+        "track ipo application ", "track ipo ", "track application for ipo ", "track application for ",
+    ]:
+        if clean_lower.startswith(prefix):
+            target = clean_msg[len(prefix):].strip()
+            p_val = None
+            if " at " in target.lower():
+                parts = target.split(" at ")
+                target = parts[0].strip()
+                import re
+                m = re.search(r"([0-9\.]+)", parts[1])
+                if m:
+                    try:
+                        p_val = float(m.group(1))
+                    except ValueError:
+                        pass
+            from utils.ipo import apply_for_ipo
+            _, reply = apply_for_ipo(target, issue_price=p_val)
+            working_memory.add_turn("assistant", reply)
+            return reply
+
+    # IPO Applied List (e.g. "my applied ipos", "applied ipos", "tracked ipos")
+    if clean_lower in ("my applied ipos", "applied ipos", "my ipos", "tracked ipos", "my tracked ipos", "applied ipo list"):
+        from utils.ipo import format_applied_ipos_card
+        reply, _ = format_applied_ipos_card()
+        working_memory.add_turn("assistant", reply)
+        return reply
+
+    # Cancel Applied IPO Tracking (e.g. "cancel applied ipo antala", "untrack ipo antala")
+    for prefix in ["cancel applied ipo ", "cancel ipo ", "untrack ipo "]:
+        if clean_lower.startswith(prefix):
+            target = clean_msg[len(prefix):].strip()
+            from utils.ipo import cancel_applied_ipo
+            _, reply = cancel_applied_ipo(target)
+            working_memory.add_turn("assistant", reply)
+            return reply
+
     # 3. Parse intent using AI
     intent = "unknown"
     params = {}
@@ -206,8 +246,8 @@ async def route_message(message: str, bot: Bot) -> str:
         reply = _handle_complete_task(params)
 
     elif intent == "query_attendance":
-        from utils.attendance import format_attendance_card
-        reply = format_attendance_card()
+        from utils.attendance import format_attendance_card_text
+        reply = format_attendance_card_text()
 
     elif intent == "query_weather":
         from utils.weather import get_weather
@@ -241,8 +281,13 @@ async def route_message(message: str, bot: Bot) -> str:
         reply = execute_deep_research(company_query)
 
     elif intent == "query_ipo":
-        from utils.ipo import format_ipo_card
-        reply = format_ipo_card()
+        from utils.ipo import format_ipo_card_text
+        reply = format_ipo_card_text()
+
+    elif intent in ("apply_ipo", "track_ipo"):
+        company = params.get("company") or params.get("ipo") or message
+        from utils.ipo import apply_for_ipo
+        _, reply = apply_for_ipo(company)
 
     elif intent == "manage_thesis":
         reply = _handle_manage_thesis(params, message)

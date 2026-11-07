@@ -2,12 +2,15 @@
 utils/attendance.py — Thapar University Attendance Tracker & Safeguard.
 Tracks attendance percentages per subject against the 75% minimum threshold.
 Calculates safe skips (bunks remaining) or deficit recovery requirements.
+Synchronizes dynamically with Google Calendar timetable to reflect today's lectures.
 """
+from __future__ import annotations
 import os
 import json
 import math
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 from zoneinfo import ZoneInfo
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from config import TIMEZONE
@@ -16,9 +19,23 @@ from utils.logger import logger
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 ATTENDANCE_FILE = DATA_DIR / "attendance.json"
 
+KNOWN_SEMESTER_SUBJECTS = [
+    "Operating Systems",
+    "Data Structures And Algorithms",
+    "Electronics Devices And Circuits",
+    "Discrete Mathematics",
+    "Object Oriented Programming Practices",
+    "AI For Engineers",
+    "Aptitude Skills Building",
+]
+
 DEFAULT_SUBJECTS = {
     "Operating Systems": {"attended": 23, "total": 26},
     "Data Structures And Algorithms": {"attended": 31, "total": 35},
+    "Electronics Devices And Circuits": {"attended": 24, "total": 28},
+    "Discrete Mathematics": {"attended": 22, "total": 25},
+    "Object Oriented Programming Practices": {"attended": 25, "total": 28},
+    "AI For Engineers": {"attended": 19, "total": 21},
     "Aptitude Skills Building": {"attended": 18, "total": 20},
 }
 
@@ -32,10 +49,24 @@ def _load_data() -> dict:
 
     try:
         with open(ATTENDANCE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception as e:
         logger.error(f"Error loading attendance file: {e}")
-        return {"subjects": DEFAULT_SUBJECTS, "history": []}
+        data = {"subjects": DEFAULT_SUBJECTS, "history": []}
+
+    # Ensure all semester subjects are populated
+    subjects = data.get("subjects", {})
+    updated = False
+    for subj, default_rec in DEFAULT_SUBJECTS.items():
+        if subj not in subjects:
+            subjects[subj] = dict(default_rec)
+            updated = True
+
+    if updated:
+        data["subjects"] = subjects
+        _save_data(data)
+
+    return data
 
 
 def _save_data(data: dict) -> None:
@@ -63,7 +94,7 @@ def get_attendance_stats() -> dict:
         pct = round((att / tot * 100), 1) if tot > 0 else 100.0
 
         if pct >= 75.0:
-            # How many more can be skipped: (att / (tot + x)) >= 0.75  ==> x <= (att - 0.75*tot)/0.75
+            # Safe skips formula: (att / (tot + x)) >= 0.75  ==> x <= (att - 0.75*tot)/0.75
             safe_bunks = int((att - 0.75 * tot) / 0.75) if tot > 0 else 0
             stats[name] = {
                 "attended": att,
@@ -74,7 +105,7 @@ def get_attendance_stats() -> dict:
                 "needed": 0,
             }
         else:
-            # How many consecutive classes needed: (att + x)/(tot + x) >= 0.75 ==> 0.25*x >= 0.75*tot - att
+            # Needed recovery formula: (att + x)/(tot + x) >= 0.75 ==> 0.25*x >= 0.75*tot - att
             needed = math.ceil((0.75 * tot - att) / 0.25)
             stats[name] = {
                 "attended": att,
@@ -92,6 +123,48 @@ def get_attendance_stats() -> dict:
         "overall_total": total_conducted,
         "overall_pct": overall_pct,
     }
+
+
+def get_todays_classes() -> list[dict]:
+    """
+    Fetch today's scheduled university lectures from Google Calendar.
+    Strictly filters for verified academic curriculum subjects, ignoring personal events, trains, etc.
+    """
+    try:
+        from google_services.calendar_service import get_todays_events
+        events = get_todays_events()
+    except Exception as e:
+        logger.warning(f"Could not retrieve calendar events for attendance check: {e}")
+        return []
+
+    classes: list[dict] = []
+    for ev in events:
+        summary = ev.get("summary", "").replace(" [Thapar]", "").strip()
+        matched_subj: Optional[str] = None
+
+        for subj in KNOWN_SEMESTER_SUBJECTS:
+            if subj.lower() in summary.lower() or summary.lower() in subj.lower():
+                matched_subj = subj
+                break
+
+        if matched_subj:
+            start_raw = ev.get("start", "")
+            time_str = "Scheduled"
+            if "T" in str(start_raw):
+                try:
+                    dt = datetime.fromisoformat(start_raw)
+                    time_str = dt.strftime("%I:%M %p")
+                except Exception:
+                    pass
+
+            classes.append({
+                "subject": matched_subj,
+                "summary": summary,
+                "time": time_str,
+                "start": start_raw,
+            })
+
+    return classes
 
 
 def record_attendance(subject: str, status: str) -> dict:
@@ -119,7 +192,7 @@ def record_attendance(subject: str, status: str) -> dict:
 
     tz = ZoneInfo(TIMEZONE)
     now = datetime.now(tz)
-    data["history"].append({
+    data.setdefault("history", []).append({
         "timestamp": now.isoformat(),
         "date": now.strftime("%Y-%m-%d"),
         "subject": matched_key,
@@ -140,19 +213,39 @@ def record_bulk(attended_subjects: list[str], missed_subjects: list[str]) -> Non
 
 
 def format_attendance_card() -> tuple[str, InlineKeyboardMarkup]:
-    """Generate formatted Telegram card with statistics and action buttons."""
+    """
+    Generate formatted Telegram card with current date, today's schedule,
+    statistics, and action buttons.
+    """
+    tz = ZoneInfo(TIMEZONE)
+    now = datetime.now(tz)
+    date_display = now.strftime("%A, %b %d, %Y")
+
     stats = get_attendance_stats()
     subjects = stats["subjects"]
-
     overall_pct = stats["overall_pct"]
     overall_icon = "🟢" if overall_pct >= 75.0 else "🔴"
 
+    todays_classes = get_todays_classes()
+
     lines = [
-        "🎓 **Thapar Attendance & Timetable Safeguard**",
-        f"📊 Overall Attendance: {overall_icon} **{overall_pct}%** ({stats['overall_attended']}/{stats['overall_total']})\n",
+        "🎓 **Thapar Academic Attendance & Safeguard**",
+        f"📅 *{date_display}*\n",
     ]
 
-    buttons = []
+    # Display today's academic schedule status
+    if todays_classes:
+        lines.append(f"📌 **Today's Scheduled Lectures ({len(todays_classes)}):**")
+        for cl in todays_classes:
+            lines.append(f"   • `{cl['time']}` — **{cl['subject']}**")
+        lines.append("")
+    else:
+        is_weekend = now.weekday() >= 5
+        status_note = "Weekend — No university lectures scheduled." if is_weekend else "No university lectures scheduled today."
+        lines.append(f"🌴 **Today's Schedule:** {status_note}\n")
+
+    lines.append(f"📊 Overall Attendance: {overall_icon} **{overall_pct}%** ({stats['overall_attended']}/{stats['overall_total']})\n")
+
     for name, s in subjects.items():
         icon = "🟢" if s["status"] == "safe" else "🚨"
         lines.append(f"{icon} **{name}**: **{s['percentage']}%** ({s['attended']}/{s['total']})")
@@ -163,12 +256,25 @@ def format_attendance_card() -> tuple[str, InlineKeyboardMarkup]:
         lines.append("")
 
     lines.append("──────────────────────")
-    lines.append("⚡ *One-tap fast actions below:*")
+    lines.append("⚡ *One-tap actions below:*")
 
-    # Fast check-in buttons
-    buttons.append([
-        InlineKeyboardButton("✅ Attended All Today", callback_data="att_all_today"),
-        InlineKeyboardButton("📝 Mark Missed", callback_data="att_menu_missed"),
-    ])
+    # Fast check-in buttons tailored to whether lectures were conducted today
+    buttons = []
+    if todays_classes:
+        buttons.append([
+            InlineKeyboardButton("✅ Attended Today's Classes", callback_data="att_all_today"),
+            InlineKeyboardButton("📝 Mark Missed", callback_data="att_menu_missed"),
+        ])
+    else:
+        buttons.append([
+            InlineKeyboardButton("📝 Mark Missed Class", callback_data="att_menu_missed"),
+            InlineKeyboardButton("🔄 Refresh", callback_data="att_back"),
+        ])
 
     return "\n".join(lines), InlineKeyboardMarkup(buttons)
+
+
+def format_attendance_card_text() -> str:
+    """Return only the markdown text of the attendance card (for chat router)."""
+    text, _ = format_attendance_card()
+    return text
