@@ -56,14 +56,17 @@ attendance check-in and audio cleanup
 | Voice input | Telegram voice download -> Groq Whisper -> normal intent route -> spoken TTS response when possible; deletes input audio in `finally`. | `bot/handlers.py`, `ai/stt.py`, `tts/speech.py` |
 | AI provider fallback | Ordered providers configurable via `AI_PROVIDER_ORDER`; supports Cloudflare, Groq, Gemini, Cerebras, NVIDIA, OpenRouter and custom OpenAI-compatible endpoint. Text/JSON generation helpers. | `ai/gemini_client.py`, `config.py` |
 | TTS | Edge-TTS primary with gTTS fallback; FFmpeg/ffmpeg binary conversion for Telegram voice OGG when possible; chime helper and stale-file cleanup. | `tts/speech.py`, `assets/` |
-| Attendance | Local JSON counts per subject, 75% safe-bunks/required-classes calculation, inline check-in buttons; data is ignored by Git. | `utils/attendance.py`, `data/` |
+| Attendance | Local JSON counts across all 7 Thapar curriculum subjects, 75% safe-bunks/deficit-recovery calculation, dynamic Google Calendar timetable synchronization, date prominence, and post-class 17:05 IST check-in. | `utils/attendance.py`, `scheduler/jobs.py` |
 | Weather/news/search | Open-Meteo geocode/forecast; DDGS search; finance/tech news retrieval; callable by slash command and natural-language router. | `utils/weather.py`, `utils/search.py`, `utils/news.py` |
 | Institutional Delivery Radar | Official NSE Bhavcopy deliverable volume screener (>60% delivery, >₹15Cr turnover); on-demand `/stealth` and 18:30 IST post-market scanner. | `utils/stealth_delivery.py`, `scheduler/jobs.py` |
+| Institutional Deep Research | Equity research dossier across 2,630+ active NSE stocks: live LTP, 52-week High/Low bar & proximity %, quarterly earnings summary, next declaration date, and future catalysts. | `utils/deep_research.py`, `bot/handlers.py` |
+| Filtered IPO Radar & Alerts | Strictly filtered active/upcoming IPOs, primary market closed intelligence with awaiting listings, and autonomous listing day debut (10:00 AM) & market close (15:45 IST) alerts. | `utils/ipo.py`, `scheduler/jobs.py` |
+| One-Tap Command Dock | Persistent Telegram mobile reply keyboard for instant access to snapshot, schedule, tasks, portfolio, memory, and briefing. | `bot/handlers.py` |
 | Diagnostics/resilience | `/status`, rotating Loguru logger, retry decorators, health endpoint, isolated fetch and AI/TTS/text fallbacks in reports. | `bot/handlers.py`, `utils/logger.py`, `utils/retry.py`, `utils/health.py` |
 
 ### Telegram commands registered in `main.py`
 
-`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`, `/watchlist`, `/earnings`, `/stealth`.
+`/start`, `/help`, `/morning`, `/evening`, `/schedule`, `/tasks`, `/weather`, `/emails`, `/classes`, `/status`, `/attendance`, `/news`, `/search`, `/market`, `/stock`, `/ipo`, `/thesis`, `/alerts`, `/memory`, `/forget`, `/watchlist`, `/earnings`, `/stealth`, `/delivery`, `/dock`, `/deepdive`, `/research`.
 
 ## Spec status and gaps
 
